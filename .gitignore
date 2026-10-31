@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.env
+coverage/
+
+# local tooling & duplicate source art (the game uses public/assets/images/janosik.png)
+/.skills.json
+/janosik.png
+/janosik.jpg

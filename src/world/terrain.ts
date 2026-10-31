@@ -1,0 +1,252 @@
+import * as THREE from 'three';
+import { LOC, ROAD_HALF_WIDTH, ROAD_HEIGHT, TERRAIN_SEGMENTS, WATER_LEVEL, WORLD_SIZE } from '@/config/constants';
+import { clamp, fbm, lerp, smoothstep, valueNoise } from '@/utils/math-utils';
+
+export function riverZ(x: number): number {
+  return 128 + Math.sin(x * 0.018) * 12 + Math.sin(x * 0.047 + 1.3) * 4;
+}
+
+export function roadZ(x: number): number {
+  return riverZ(x) - 16;
+}
+
+function baseHeight(x: number, z: number): number {
+  let h = 1.2 + fbm(x * 0.011 + 3.1, z * 0.011 - 7.3, 4) * 9;
+  const dv = Math.hypot(x - LOC.vatra.x, z - LOC.vatra.z);
+  h += 15 * Math.exp(-(dv * dv) / (2 * 26 * 26));
+  const dc = Math.hypot(x - LOC.castle.x, z - LOC.castle.z);
+  h += 13 * Math.exp(-(dc * dc) / (2 * 16 * 16));
+  const r = Math.hypot(x, z);
+  if (r > 160) {
+    const t = r - 160;
+    h += t * t * 0.03 + t * 0.9 * fbm(x * 0.04, z * 0.04, 3);
+  }
+  return h;
+}
+
+interface Flat {
+  x: number;
+  z: number;
+  r: number;
+  h: number;
+}
+
+const FLATS: Flat[] = [
+  { x: LOC.village.x, z: LOC.village.z, r: 50, h: 2.6 },
+  { x: LOC.salas.x, z: LOC.salas.z, r: 16, h: baseHeight(LOC.salas.x, LOC.salas.z) },
+  { x: LOC.terchova.x, z: LOC.terchova.z, r: 18, h: baseHeight(LOC.terchova.x, LOC.terchova.z) },
+  { x: LOC.vatra.x, z: LOC.vatra.z, r: 9, h: baseHeight(LOC.vatra.x, LOC.vatra.z) },
+  { x: LOC.castle.x, z: LOC.castle.z, r: 9, h: baseHeight(LOC.castle.x, LOC.castle.z) },
+];
+
+/** Dirt paths between places (drawn into vertex colors). */
+const PATHS: [number, number, number, number][] = [
+  [30, 40, 30, 95],
+  [30, 95, 24, roadZ(24)],
+  [10, 20, -40, 30],
+  [-40, 30, -80, 46],
+  [10, 10, -30, -30],
+  [-30, -30, -62, -74],
+  [60, 0, 95, -40],
+  [95, -40, 116, -66],
+];
+
+function distToSegment(px: number, pz: number, ax: number, az: number, bx: number, bz: number): number {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const t = clamp(((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz), 0, 1);
+  return Math.hypot(px - (ax + dx * t), pz - (az + dz * t));
+}
+
+export function pathDistance(x: number, z: number): number {
+  let d = Infinity;
+  for (const [ax, az, bx, bz] of PATHS) d = Math.min(d, distToSegment(x, z, ax, az, bx, bz));
+  return d;
+}
+
+/** Analytic terrain height used to build the mesh. */
+export function heightAt(x: number, z: number): number {
+  let h = baseHeight(x, z);
+  for (const f of FLATS) {
+    const d = Math.hypot(x - f.x, z - f.z);
+    if (d < f.r + 14) h = lerp(h, f.h, smoothstep(f.r + 14, f.r, d));
+  }
+  const dRoad = Math.abs(z - roadZ(x));
+  if (dRoad < 12) h = lerp(h, ROAD_HEIGHT, smoothstep(12, 3.5, dRoad));
+  const dRiver = Math.abs(z - riverZ(x));
+  if (dRiver < 13) h = lerp(h, -2.6, smoothstep(13, 5, dRiver));
+  return h;
+}
+
+export function isMud(x: number, z: number): boolean {
+  const dRoad = Math.abs(z - roadZ(x));
+  if (dRoad < ROAD_HALF_WIDTH + 0.5 && valueNoise(x * 0.09, z * 0.09) > 0.62) return true;
+  const dv = Math.hypot(x - LOC.village.x, z - LOC.village.z);
+  return dv < 40 && valueNoise(x * 0.13 + 40, z * 0.13) > 0.74;
+}
+
+export function isRoad(x: number, z: number): boolean {
+  return Math.abs(z - roadZ(x)) < ROAD_HALF_WIDTH;
+}
+
+const C = {
+  grassA: new THREE.Color(0x5d7d39),
+  grassB: new THREE.Color(0x7f9443),
+  forest: new THREE.Color(0x4a6630),
+  road: new THREE.Color(0x8b6b47),
+  path: new THREE.Color(0x917650),
+  mud: new THREE.Color(0x4d3925),
+  rock: new THREE.Color(0x7c7871),
+  snow: new THREE.Color(0xe6eaee),
+  bed: new THREE.Color(0x5b5a48),
+  bank: new THREE.Color(0x8f8a6a),
+  field: new THREE.Color(0x5e4630),
+};
+
+export function colorAt(x: number, z: number, h: number, slope: number, out: THREE.Color): THREE.Color {
+  if (h < WATER_LEVEL + 0.1) return out.copy(C.bed);
+  if (h < 0.2 && Math.abs(z - riverZ(x)) < 14) return out.copy(C.bank);
+  if (isMud(x, z)) return out.copy(C.mud);
+  if (isRoad(x, z)) return out.copy(C.road);
+  if (Math.abs(x - LOC.field.x) < 9 && Math.abs(z - LOC.field.z) < 6) {
+    return out.copy(Math.floor((z - LOC.field.z + 6) / 1.5) % 2 === 0 ? C.field : C.grassA);
+  }
+  if (h > 46) return out.copy(C.snow);
+  if (slope > 0.85 || h > 30) return out.copy(C.rock);
+  if (pathDistance(x, z) < 1.7) return out.copy(C.path);
+  const n = fbm(x * 0.03, z * 0.03, 3);
+  out.copy(C.grassA).lerp(C.grassB, n);
+  if (fbm(x * 0.02 + 50, z * 0.02 - 20, 3) > 0.55) out.lerp(C.forest, 0.6);
+  return out;
+}
+
+/**
+ * Low-poly terrain built from a height grid. The same triangulation is used for
+ * mesh and collision so actors stand exactly on the visible surface.
+ */
+export class Terrain {
+  readonly mesh: THREE.Mesh;
+  private readonly heights: Float32Array;
+  private readonly n = TERRAIN_SEGMENTS;
+  private readonly cell = WORLD_SIZE / TERRAIN_SEGMENTS;
+  private readonly half = WORLD_SIZE / 2;
+
+  constructor() {
+    const n = this.n;
+    this.heights = new Float32Array((n + 1) * (n + 1));
+    for (let j = 0; j <= n; j++) {
+      for (let i = 0; i <= n; i++) {
+        this.heights[j * (n + 1) + i] = heightAt(i * this.cell - this.half, j * this.cell - this.half);
+      }
+    }
+    const positions = new Float32Array(n * n * 6 * 3);
+    const colors = new Float32Array(n * n * 6 * 3);
+    const col = new THREE.Color();
+    let p = 0;
+    const pushTri = (verts: number[][], cx: number, cz: number, slope: number, hAvg: number): void => {
+      colorAt(cx, cz, hAvg, slope, col);
+      const jitter = 0.95 + valueNoise(cx * 1.7, cz * 1.7) * 0.1;
+      for (const v of verts) {
+        positions[p] = v[0];
+        positions[p + 1] = v[1];
+        positions[p + 2] = v[2];
+        colors[p] = col.r * jitter;
+        colors[p + 1] = col.g * jitter;
+        colors[p + 2] = col.b * jitter;
+        p += 3;
+      }
+    };
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        const x0 = i * this.cell - this.half;
+        const z0 = j * this.cell - this.half;
+        const x1 = x0 + this.cell;
+        const z1 = z0 + this.cell;
+        const h00 = this.h(i, j);
+        const h10 = this.h(i + 1, j);
+        const h01 = this.h(i, j + 1);
+        const h11 = this.h(i + 1, j + 1);
+        const s1 = (Math.max(h00, h10, h01) - Math.min(h00, h10, h01)) / this.cell;
+        const s2 = (Math.max(h10, h01, h11) - Math.min(h10, h01, h11)) / this.cell;
+        pushTri(
+          [
+            [x0, h00, z0],
+            [x0, h01, z1],
+            [x1, h10, z0],
+          ],
+          x0 + this.cell / 3,
+          z0 + this.cell / 3,
+          s1,
+          (h00 + h10 + h01) / 3,
+        );
+        pushTri(
+          [
+            [x1, h10, z0],
+            [x0, h01, z1],
+            [x1, h11, z1],
+          ],
+          x0 + (this.cell * 2) / 3,
+          z0 + (this.cell * 2) / 3,
+          s2,
+          (h10 + h01 + h11) / 3,
+        );
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+    const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
+    this.mesh = new THREE.Mesh(geo, material);
+    this.mesh.receiveShadow = true;
+  }
+
+  private h(i: number, j: number): number {
+    return this.heights[j * (this.n + 1) + i];
+  }
+
+  /** Exact height of the rendered triangle under (x, z). */
+  height(x: number, z: number): number {
+    const gx = clamp((x + this.half) / this.cell, 0, this.n - 0.0001);
+    const gz = clamp((z + this.half) / this.cell, 0, this.n - 0.0001);
+    const i = Math.floor(gx);
+    const j = Math.floor(gz);
+    const fx = gx - i;
+    const fz = gz - j;
+    const h00 = this.h(i, j);
+    const h10 = this.h(i + 1, j);
+    const h01 = this.h(i, j + 1);
+    const h11 = this.h(i + 1, j + 1);
+    if (fx + fz <= 1) return h00 + (h10 - h00) * fx + (h01 - h00) * fz;
+    return h11 + (h01 - h11) * (1 - fx) + (h10 - h11) * (1 - fz);
+  }
+
+  /** Top-down color map for the HUD minimap. */
+  renderMinimap(size: number): HTMLCanvasElement {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const g = canvas.getContext('2d');
+    if (!g) return canvas;
+    const img = g.createImageData(size, size);
+    const col = new THREE.Color();
+    for (let py = 0; py < size; py++) {
+      for (let px = 0; px < size; px++) {
+        const x = (px / size) * WORLD_SIZE - this.half;
+        const z = (py / size) * WORLD_SIZE - this.half;
+        const h = this.height(x, z);
+        if (h < WATER_LEVEL) col.set(0x4f6f86);
+        else colorAt(x, z, h, (Math.abs(this.height(x + 2, z) - h) + Math.abs(this.height(x, z + 2) - h)) / 2, col);
+        col.convertLinearToSRGB();
+        const shade = 0.75 + clamp(h / 60, 0, 0.35);
+        const k = (py * size + px) * 4;
+        img.data[k] = Math.min(255, col.r * 255 * shade * 1.15);
+        img.data[k + 1] = Math.min(255, col.g * 255 * shade * 1.15);
+        img.data[k + 2] = Math.min(255, col.b * 255 * shade * 1.15);
+        img.data[k + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    return canvas;
+  }
+}
