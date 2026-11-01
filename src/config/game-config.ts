@@ -5,9 +5,6 @@ export const GAME_CONFIG = {
   version: '0.1.0',
   targetFps: 60,
   renderer: {
-    antialias: true,
-    shadowMapSize: 2048,
-    shadowExtent: 42,
     toneMappingExposure: 1.05,
   },
   camera: {
@@ -28,7 +25,8 @@ export const GAME_CONFIG = {
 } as const;
 
 export const DEFAULT_GRAPHICS: GraphicsSettings = {
-  postProcessing: true,
-  shadows: true,
-  maxPixelRatio: 2,
+  quality: 'medium',
+  userChosen: false,
+  dynamicResolution: true,
+  showFps: false,
 };

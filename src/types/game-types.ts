@@ -89,9 +89,11 @@ export interface AudioSettings {
 }
 
 export interface GraphicsSettings {
-  postProcessing: boolean;
-  shadows: boolean;
-  maxPixelRatio: number;
+  quality: 'low' | 'medium' | 'high' | 'ultra';
+  /** false until the player picks a preset – until then the detected one is used */
+  userChosen: boolean;
+  dynamicResolution: boolean;
+  showFps: boolean;
 }
 
 export interface FujaraSong {

@@ -1,4 +1,5 @@
 import { GAME_CONFIG } from '@/config/game-config';
+import { QUALITY_LEVELS, QUALITY_PRESETS, type QualityLevel } from '@/config/quality';
 import type { App } from '@/core/app';
 import type { AudioManager } from '@/systems/audio-manager';
 import { createButton, el } from './button';
@@ -102,9 +103,27 @@ export function createSettingsPanel(audio: AudioManager, app: App, onClose: () =
     panel.appendChild(row);
   };
   check('Stlmiť zvuk', audio.settings.muted, () => audio.toggleMute());
-  check('Tiene', app.graphics.shadows, (v) => app.setShadows(v));
-  check('Filmový obraz (post-processing)', app.graphics.postProcessing, (v) => app.setPostProcessing(v));
-  check('Ostrý obraz (vyššie rozlíšenie)', app.graphics.maxPixelRatio > 1, (v) => app.setMaxPixelRatio(v ? 2 : 1));
+
+  const qualityRow = el('div', 'setting quality');
+  const qualityLabel = el('label', '', 'Grafika');
+  const select = el('select');
+  for (const level of QUALITY_LEVELS) {
+    const opt = el('option');
+    opt.value = level;
+    opt.textContent = QUALITY_PRESETS[level].label + (level === app.gpu.suggested ? ' (odporúčaná)' : '');
+    opt.selected = level === app.graphics.quality;
+    select.appendChild(opt);
+  }
+  select.addEventListener('change', () => app.setQuality(select.value as QualityLevel));
+  qualityRow.append(qualityLabel, select);
+  panel.appendChild(qualityRow);
+  const gpu = el('p', 'gpu-info');
+  gpu.textContent = `Grafická karta: ${app.gpu.name}`;
+  panel.appendChild(gpu);
+  check('Dynamické rozlíšenie (plynulosť pred ostrosťou)', app.graphics.dynamicResolution, (v) =>
+    app.setDynamicResolution(v),
+  );
+  check('Zobraziť FPS', app.graphics.showFps, (v) => app.setShowFps(v));
   const s = el('div', 'stack');
   s.style.marginTop = '18px';
   s.appendChild(createButton('Celá obrazovka', () => app.toggleFullscreen()));

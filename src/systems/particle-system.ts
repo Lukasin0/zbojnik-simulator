@@ -46,6 +46,8 @@ export class ParticleSystem {
   readonly mesh: THREE.InstancedMesh;
   private readonly pool: ObjectPool<Particle>;
   private readonly active: Particle[] = [];
+  /** Quality multiplier for particle counts (fractional counts are rounded stochastically). */
+  density = 1;
 
   constructor(scene: THREE.Scene, private readonly max = 1200) {
     const geo = new THREE.BoxGeometry(1, 1, 1);
@@ -83,7 +85,8 @@ export class ParticleSystem {
   }
 
   emit(o: EmitOptions): void {
-    const count = o.count ?? 8;
+    const scaled = (o.count ?? 8) * this.density;
+    const count = Math.floor(scaled) + (Math.random() < scaled % 1 ? 1 : 0);
     const spread = o.spread ?? 0.2;
     const speed = o.speed ?? 2;
     const colors = typeof o.color === 'number' ? [o.color] : o.color;

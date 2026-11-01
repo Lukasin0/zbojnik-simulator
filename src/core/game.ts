@@ -105,6 +105,8 @@ export class Game {
   ) {
     this.world = new World(app.scene);
     this.particles = new ParticleSystem(app.scene);
+    this.particles.density = app.preset.particleDensity;
+    app.onQualityChange = (p) => (this.particles.density = p.particleDensity);
     this.cameraCtl = new CameraController(app.camera, (x, z) => this.world.groundHeight(x, z));
     this.cameraCtl.occluders = this.world.occluders;
     this.ambush = new AmbushSystem(app.scene, this.world);
