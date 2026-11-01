@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { App } from '@/core/app';
 import { clamp, smoothstep } from '@/utils/math-utils';
+import type { WeatherState } from './weather';
 
 /** Hex values of one atmosphere keyframe. */
 interface KeyHex {
@@ -65,6 +66,10 @@ function toKey(h: KeyHex): Key {
 }
 
 const KEYS: [number, Key][] = KEYFRAMES.map(([t, k]) => [t, toKey(k)]);
+
+const tmpGrey = new THREE.Color();
+const STORM_SHADE = new THREE.Color(0x3a4048);
+const FLASH = new THREE.Color(0xeef2ff);
 
 /** World-side reaction to darkness (lit windows, brighter fires, mist). */
 export interface NightReceiver {
@@ -132,11 +137,36 @@ export class DayNight {
     this.night = 1 - smoothstep(-0.14, 0.1, this.sunDir.y);
   }
 
-  /** Push the current time of day into the renderer, sky and world. */
-  apply(app: App, world: NightReceiver, focus: THREE.Vector3, frameDt: number): void {
+  /** Grey-out and darken the palette under clouds; lightning brightens everything. */
+  private applyWeather(w: WeatherState): void {
+    const c = this.cur;
+    const o = w.overcast;
+    if (o > 0.001) {
+      for (const col of [c.top, c.horizon, c.light, c.hemiSky, c.cloudLit]) {
+        const lum = col.r * 0.3 + col.g * 0.59 + col.b * 0.11;
+        tmpGrey.setRGB(lum, lum, lum);
+        col.lerp(tmpGrey, o * 0.6);
+      }
+      c.top.multiplyScalar(1 - o * 0.3);
+      c.cloudShade.lerp(STORM_SHADE, o * 0.8);
+      c.lightIntensity *= 1 - o * 0.65;
+      c.hemiIntensity *= 1 - o * 0.22;
+    }
+    c.fogDensity *= w.fogMul;
+    if (w.flash > 0) {
+      c.top.lerp(FLASH, w.flash * 0.7);
+      c.horizon.lerp(FLASH, w.flash * 0.4);
+      c.hemiIntensity += w.flash * 3;
+      c.exposure += w.flash * 0.8;
+    }
+  }
+
+  /** Push the current time of day (and weather) into the renderer, sky and world. */
+  apply(app: App, world: NightReceiver, focus: THREE.Vector3, frameDt: number, weather: WeatherState | null): void {
     this.elapsed += frameDt;
     this.computeCelestial();
     this.sample(this.time);
+    if (weather) this.applyWeather(weather);
     const c = this.cur;
 
     // sun by day, moon by night – fade the light out around the hand-over to hide the jump
@@ -166,6 +196,7 @@ export class DayNight {
     u.uTime.value = this.elapsed;
     u.uCloudLit.value.copy(c.cloudLit);
     u.uCloudShade.value.copy(c.cloudShade);
+    u.uCloudCover.value = 0.42 + (weather?.overcast ?? 0) * 0.55;
 
     world.setNight(this.night);
     world.updateMist(this.elapsed, c.mist, c.horizon);

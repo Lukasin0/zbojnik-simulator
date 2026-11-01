@@ -73,6 +73,7 @@ export class Hud {
   private readonly minimap: HTMLCanvasElement;
   private readonly mapCtx: CanvasRenderingContext2D | null;
   private readonly clock: HTMLDivElement;
+  private readonly emotes: HTMLDivElement;
   private readonly hotbar: HTMLDivElement;
   private readonly ingredients: HTMLDivElement;
   private readonly prompt: HTMLDivElement;
@@ -124,8 +125,20 @@ export class Hud {
     this.barkLayer = el('div');
     this.card = el('div', 'chapter-card', '<div class="num"></div><div class="title"></div><div class="embroidery"></div>');
     this.clickHint = el('div', 'click-hint', 'Klikni do hry pre ovládanie kamery myšou');
+    this.emotes = el('div', 'emotes');
 
-    this.root.append(tl, tr, this.hotbar, this.ingredients, this.prompt, this.crosshair, this.barkLayer, this.card, this.clickHint);
+    this.root.append(
+      tl,
+      tr,
+      this.hotbar,
+      this.ingredients,
+      this.prompt,
+      this.crosshair,
+      this.barkLayer,
+      this.card,
+      this.clickHint,
+      this.emotes,
+    );
     parent.append(this.root, this.toasts);
     this.buildHotbar();
   }
@@ -210,11 +223,27 @@ export class Hud {
     this.clickHint.classList.toggle('show', s.clickHint);
   }
 
-  setClock(text: string, night: boolean): void {
-    if (this.changed('clock', `${text}|${night}`)) {
-      this.clock.textContent = `${night ? '☾' : '☀'} ${text}`;
+  setClock(text: string, night: boolean, icon: string): void {
+    if (this.changed('clock', `${text}|${night}|${icon}`)) {
+      this.clock.textContent = `${icon} ${text}`;
       this.clock.classList.toggle('night', night);
     }
+  }
+
+  /** null hides the emote menu. */
+  showEmotes(names: string[] | null): void {
+    if (!names) {
+      this.emotes.classList.remove('show');
+      return;
+    }
+    this.emotes.innerHTML = '<div class="emotes-title">Emócie – stlač číslo</div>';
+    names.forEach((n, i) => {
+      const row = el('div', 'emote');
+      row.innerHTML = `<kbd>${i + 1}</kbd> `;
+      row.append(document.createTextNode(n));
+      this.emotes.appendChild(row);
+    });
+    this.emotes.classList.add('show');
   }
 
   setPrompt(text: string | null): void {

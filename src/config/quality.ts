@@ -24,6 +24,8 @@ export interface QualityPreset {
   clouds: boolean;
   /** Valley mist layers (morning / night). */
   mist: boolean;
+  /** Rain streaks rendered around the camera at full downpour. */
+  rainDrops: number;
 }
 
 export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
@@ -42,6 +44,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     drawDistance: 420,
     clouds: false,
     mist: false,
+    rainDrops: 700,
   },
   medium: {
     label: 'Stredná',
@@ -58,6 +61,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     drawDistance: 650,
     clouds: true,
     mist: true,
+    rainDrops: 1700,
   },
   high: {
     label: 'Vysoká',
@@ -74,6 +78,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     drawDistance: 900,
     clouds: true,
     mist: true,
+    rainDrops: 3500,
   },
   ultra: {
     label: 'Ultra',
@@ -90,6 +95,7 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     drawDistance: 900,
     clouds: true,
     mist: true,
+    rainDrops: 5000,
   },
 };
 

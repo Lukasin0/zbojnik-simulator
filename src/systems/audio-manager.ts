@@ -16,7 +16,8 @@ export type SfxId =
   | 'death'
   | 'miss'
   | 'burn'
-  | 'straw';
+  | 'straw'
+  | 'thunder';
 
 export type MusicMode = 'off' | 'explore' | 'combat';
 
@@ -432,6 +433,83 @@ export class AudioManager {
       case 'straw':
         this.noiseBurst(t, 0.3, 3500, 'bandpass', 0.35, out, 1200);
         break;
+      case 'thunder':
+        // sharp crack followed by a long rolling rumble
+        this.noiseBurst(t, 0.25, 2500, 'bandpass', 0.5, out, 400);
+        this.noiseBurst(t + 0.05, 3.2, 260, 'lowpass', 1.4, out, 60);
+        this.tone(t + 0.05, 'sine', 55, 32, 2.6, 0.5, out);
+        break;
+    }
+  }
+
+  // --- Weather ambience -----------------------------------------------------------
+
+  private rainGain: GainNode | null = null;
+  private windGain: GainNode | null = null;
+  private windFilter: BiquadFilterNode | null = null;
+
+  private ensureAmbience(ctx: AudioContext): void {
+    if (this.rainGain) return;
+    const loop = (): AudioBufferSourceNode => {
+      const s = ctx.createBufferSource();
+      s.buffer = this.noise;
+      s.loop = true;
+      s.start();
+      return s;
+    };
+    const rain = loop();
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 900;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 7000;
+    this.rainGain = ctx.createGain();
+    this.rainGain.gain.value = 0;
+    rain.connect(hp);
+    hp.connect(lp);
+    lp.connect(this.rainGain);
+    this.rainGain.connect(this.sfxBus);
+
+    const wind = loop();
+    this.windFilter = ctx.createBiquadFilter();
+    this.windFilter.type = 'bandpass';
+    this.windFilter.frequency.value = 380;
+    this.windFilter.Q.value = 0.8;
+    this.windGain = ctx.createGain();
+    this.windGain.gain.value = 0;
+    wind.connect(this.windFilter);
+    this.windFilter.connect(this.windGain);
+    this.windGain.connect(this.sfxBus);
+  }
+
+  /** Continuous rain hiss and gusting wind; 0..1 each. */
+  setAmbience(rain: number, wind: number): void {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state !== 'running') return;
+    this.ensureAmbience(ctx);
+    const t = ctx.currentTime;
+    this.rainGain?.gain.setTargetAtTime(rain * 0.22, t, 0.5);
+    const gust = 0.6 + Math.sin(t * 0.7) * 0.25 + Math.sin(t * 1.9) * 0.15;
+    this.windGain?.gain.setTargetAtTime(Math.max(0, wind - 0.1) * 0.35 * gust, t, 0.4);
+    this.windFilter?.frequency.setTargetAtTime(280 + gust * 260, t, 0.4);
+  }
+
+  /** Fast fiddle + drum tune for the odzemok dance. */
+  playDance(seconds: number): void {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state !== 'running') return;
+    const step = 0.2;
+    const riff = [7, 9, 10, 9, 7, 9, 7, 4, 5, 7, 9, 7, 5, 4, 3, 4];
+    const t0 = ctx.currentTime + 0.05;
+    const steps = Math.floor(seconds / step);
+    for (let i = 0; i < steps; i++) {
+      const t = t0 + i * step;
+      if (i % 4 === 0) this.kick(t, this.sfxBus);
+      if (i % 4 === 2) this.snare(t, this.sfxBus);
+      this.fiddle(SCALE[riff[i % riff.length]], t, step * 0.9, this.sfxBus);
+      // the shout every two bars
+      if (i % 16 === 14) this.noiseBurst(t, 0.12, 1400, 'bandpass', 0.25, this.sfxBus);
     }
   }
 

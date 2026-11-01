@@ -82,6 +82,7 @@ export class World implements GroundProvider, NightReceiver {
   /** Shared window-glass material of every house – glows warm at night. */
   private readonly windowMaterial = mat(0x23262a);
   private night = 0;
+  private wetness = 0;
   private readonly colliders: Collider[] = [];
   private readonly grid = new Map<number, number[]>();
   private readonly sheep: Sheep[] = [];
@@ -239,7 +240,16 @@ export class World implements GroundProvider, NightReceiver {
   }
 
   isMud(x: number, z: number): boolean {
-    return isMud(x, z);
+    return isMud(x, z, this.wetness);
+  }
+
+  /** Rain darkens the ground and makes it glossier; mud spreads (see isMud). */
+  setWetness(w: number): void {
+    if (Math.abs(w - this.wetness) < 0.002) return;
+    this.wetness = w;
+    const m = this.terrain.mesh.material as THREE.MeshStandardMaterial;
+    m.color.setScalar(1 - w * 0.32);
+    m.roughness = 0.95 - w * 0.4;
   }
 
   waterDepth(x: number, z: number): number {

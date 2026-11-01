@@ -10,7 +10,8 @@ export interface Hittable {
   readonly hitHeight: number;
   readonly faction: Faction;
   isAlive(): boolean;
-  receiveHit(damage: number, from: THREE.Vector3, source: HitSource): void;
+  /** `force` = knockback strength (heavy blows send pandúri flying). */
+  receiveHit(damage: number, from: THREE.Vector3, source: HitSource, force?: number): void;
 }
 
 const tmp = new THREE.Vector3();
@@ -42,6 +43,7 @@ export class CombatSystem {
     damage: number,
     faction: Faction,
     source: HitSource,
+    force?: number,
   ): Hittable[] {
     const hits: Hittable[] = [];
     for (const t of this.targets) {
@@ -53,7 +55,7 @@ export class CombatSystem {
       if (Math.abs(t.position.y - origin.y) > 2.2) continue;
       const ang = Math.atan2(dx, dz);
       if (dist > 0.6 && Math.abs(angleDiff(facing, ang)) > arc / 2) continue;
-      t.receiveHit(damage, origin, source);
+      t.receiveHit(damage, origin, source, force);
       hits.push(t);
     }
     return hits;

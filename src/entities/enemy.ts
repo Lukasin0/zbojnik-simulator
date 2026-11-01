@@ -32,6 +32,7 @@ export class Pandur extends Actor {
   constructor(parent: THREE.Object3D) {
     super(PANDUR, parent, T.hp);
     this.body.radius = 0.4;
+    this.attackKind = 'slashR';
   }
 
   get alerted(): boolean {
@@ -54,11 +55,17 @@ export class Pandur extends Actor {
     this.pose = 'sleep';
   }
 
-  receiveHit(damage: number, from: THREE.Vector3, _source: HitSource): void {
+  receiveHit(damage: number, from: THREE.Vector3, _source: HitSource, force = 3.5): void {
     if (this.state === 'dead') return;
     const wasSleeping = this.state === 'sleepy';
     this.hp = Math.max(0, this.hp - damage * (wasSleeping ? 1.5 : 1));
-    this.knockback(from, 3.5);
+    this.knockback(from, force);
+    // heavy blows lift the poor fellow off his feet
+    if (force > 6) {
+      this.body.velocity.y = Math.max(this.body.velocity.y, force * 0.55);
+      this.body.onGround = false;
+    }
+    this.hitsTaken++;
     if (this.hp <= 0) {
       this.state = 'dead';
       this.pose = 'dead';
@@ -71,9 +78,12 @@ export class Pandur extends Actor {
     }
     this.pose = 'normal';
     this.state = 'stagger';
-    this.timer = 0.35;
+    this.timer = 0.3 + force * 0.05;
     this.attackT = -1;
   }
+
+  /** Counts hits so the ambush system can make him complain now and then. */
+  hitsTaken = 0;
 
   private pickTarget(targets: Actor[]): Actor | null {
     let best: Actor | null = null;

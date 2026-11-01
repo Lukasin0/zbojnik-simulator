@@ -6,6 +6,7 @@ import type { HitSource } from '@/systems/combat-system';
 import type { CompanionId } from '@/types/game-types';
 import { Actor } from './actor';
 import type { Pandur } from './enemy';
+import { NPC_ATTACKS } from './attacks';
 
 export interface CompanionContext {
   world: GroundProvider;
@@ -24,6 +25,7 @@ export class Companion extends Actor {
   private downTimer = 0;
   private target: Pandur | null = null;
   private struck = false;
+  private swing = Math.floor(Math.random() * 3);
 
   constructor(
     readonly id: CompanionId,
@@ -44,6 +46,7 @@ export class Companion extends Actor {
     if (this.downed || source === 'player' || source === 'companion') return;
     this.hp = Math.max(0, this.hp - damage);
     this.knockback(from, 3);
+    this.cancelEmote();
     if (this.hp <= 0) {
       this.downed = true;
       this.downTimer = 0;
@@ -71,6 +74,16 @@ export class Companion extends Actor {
         this.hp = Math.round(this.maxHp * 0.4);
         this.pose = 'normal';
       }
+      this.body.steer(0, 0, 8, dt);
+      this.body.integrate(dt, ctx.world);
+      return;
+    }
+
+    // dancing / waving along with the captain – a fight ends the fun
+    this.tickEmote(dt);
+    if (ctx.combat) this.cancelEmote();
+    if (this.emoting) {
+      this.faceTowards(ctx.leader.position, 4, dt);
       this.body.steer(0, 0, 8, dt);
       this.body.integrate(dt, ctx.world);
       return;
@@ -113,6 +126,7 @@ export class Companion extends Actor {
       } else if (this.cooldown <= 0 && this.attackT < 0) {
         this.attackT = 0;
         this.struck = false;
+        this.attackKind = NPC_ATTACKS[this.swing++ % NPC_ATTACKS.length];
         this.cooldown = T.cooldown + Math.random() * 0.4;
       }
     } else {

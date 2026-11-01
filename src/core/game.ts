@@ -42,6 +42,32 @@ import { mulberry32, pick } from '@/utils/math-utils';
 import { Scheduler } from '@/utils/timer';
 import { World } from '@/world/world';
 import { DayNight } from '@/world/day-night';
+import { Weather } from '@/world/weather';
+import { WeaponTrail } from '@/systems/weapon-trail';
+import type { AttackDef } from '@/entities/attacks';
+import {
+  AFTER_FIGHT,
+  BANTER,
+  BANTER_HURT,
+  BANTER_MUD,
+  BANTER_NIGHT,
+  BANTER_RAIN,
+  PANDUR_DOWN,
+  VILLAGER_DANCE,
+  VILLAGER_LAUGH,
+  VILLAGER_WAVE,
+  line,
+} from '@/story/lines';
+
+export type EmoteId = 'wave' | 'odzemok' | 'hej' | 'laugh' | 'sit';
+
+export const EMOTES: { id: EmoteId; name: string }[] = [
+  { id: 'wave', name: 'Mávanie' },
+  { id: 'odzemok', name: 'Odzemok' },
+  { id: 'hej', name: 'Hej-hou!' },
+  { id: 'laugh', name: 'Smiech' },
+  { id: 'sit', name: 'Sadnúť si' },
+];
 
 export const COMPANION_DEFS: Record<CompanionId, { name: string; look: CharacterLook; slot: { side: number; back: number } }> = {
   uhorcik: { name: 'Uhorčík', look: UHORCIK, slot: { side: -1.7, back: 2.2 } },
@@ -59,6 +85,8 @@ const NOBLES = [
 
 const tmpV = new THREE.Vector3();
 const tmpDir = new THREE.Vector3();
+const tmpA = new THREE.Vector3();
+const tmpB = new THREE.Vector3();
 
 /** Central gameplay orchestrator: owns the world, actors, systems and the save state. */
 export class Game {
@@ -83,6 +111,15 @@ export class Game {
   tipReadyAt = 0;
   fieldReadyAt = 0;
   haluskyUntil = 0;
+  /** Freeze-frame timer after a solid melee hit. */
+  private hitStop = 0;
+  private emoteMenu = false;
+  private odzemokReadyAt = 0;
+  private banterTimer = 35;
+  private readonly trail: WeaponTrail;
+  readonly weather: Weather;
+  /** Dev tools: freeze the captain in a given attack frame. */
+  debugPose: { kind: AttackDef['anim']; t: number } | null = null;
   /** Set by the play scene: show death / prologue-end screens. */
   onPlayerDown: ((lost: number) => void) | null = null;
   onPrologueEnd: (() => void) | null = null;
@@ -107,11 +144,15 @@ export class Game {
   ) {
     this.world = new World(app.scene);
     this.particles = new ParticleSystem(app.scene);
+    this.trail = new WeaponTrail(app.scene);
+    this.weather = new Weather(app.scene);
+    this.weather.setDropCount(app.preset.rainDrops);
     this.particles.density = app.preset.particleDensity;
     this.world.mist.setEnabled(app.preset.mist);
     app.onQualityChange = (p) => {
       this.particles.density = p.particleDensity;
       this.world.mist.setEnabled(p.mist);
+      this.weather.setDropCount(p.rainDrops);
     };
     this.cameraCtl = new CameraController(app.camera, (x, z) => this.world.groundHeight(x, z));
     this.cameraCtl.occluders = this.world.occluders;
@@ -145,8 +186,12 @@ export class Game {
     this.combat.register(this.player);
 
     this.playerHooks = {
-      onSwing: () => this.sfx('swing', this.player.position),
-      onMeleeHit: (p) => this.playerMelee(p),
+      onSwing: (_p, def) =>
+        this.audio.play('swing', {
+          pos: this.player.position,
+          pitch: def.anim === 'spin' ? 0.6 : def.anim === 'overhead' ? 0.8 : 0.95 + this.rng() * 0.15,
+        }),
+      onMeleeHit: (p, def) => this.playerMelee(p, def),
       onShoot: (p) => this.playerShoot(p),
       onJump: () => this.sfx('jump'),
       onHurt: () => undefined,
@@ -222,6 +267,8 @@ export class Game {
     }
 
     this.dayNight.setTime(this.data.timeOfDay);
+    this.weather.reset();
+    this.world.setWetness(0);
     const p = this.data.player;
     this.player.teleport(p.x, p.z, this.world);
     this.player.stamina = p.stamina;
@@ -257,7 +304,11 @@ export class Game {
   stop(): void {
     this.playing = false;
     this.hud.show(false);
+    this.setEmoteMenu(false);
     this.audio.setMusicMode('off');
+    this.audio.setAmbience(0, 0);
+    this.weather.reset();
+    this.world.setWetness(0);
     this.input.exitPointerLock();
   }
 
@@ -547,14 +598,31 @@ export class Game {
 
   // ------------------------------------------------------------------ combat callbacks
 
-  private playerMelee(p: Player): void {
-    const hits = this.combat.melee(p.position, p.facing, PLAYER_TUNING.attackRange, PLAYER_TUNING.attackArc, p.damage, 'zbojnik', 'player');
+  private playerMelee(p: Player, def: AttackDef): void {
+    const hits = this.combat.melee(p.position, p.facing, def.range, def.arc, p.damage * def.damage, 'zbojnik', 'player', def.knockback);
+    let struckEnemy = false;
     for (const h of hits) {
-      if (h.faction === 'pandur') {
-        this.sfx('hit', h.position);
-        this.cameraCtl.shake(0.15);
-        this.particles.emit({ x: h.position.x, y: h.position.y + 1.2, z: h.position.z, count: 8, color: [0xffe0a0, 0xffffff], speed: 4, life: [0.2, 0.4] });
+      if (h.faction !== 'pandur') continue;
+      struckEnemy = true;
+      this.sfx('hit', h.position, def.anim === 'spin' || def.anim === 'overhead' ? 0.75 : 1);
+      this.particles.emit({ x: h.position.x, y: h.position.y + 1.2, z: h.position.z, count: def.damage > 1.5 ? 16 : 9, color: [0xffe0a0, 0xffffff], speed: 4 + def.knockback * 0.3, life: [0.2, 0.45] });
+    }
+    // ground impact of the leap and the whirl – dust ring around the captain
+    if (def.anim === 'overhead' || def.anim === 'spin') {
+      const g = p.position;
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        const r = def.anim === 'spin' ? 1.6 : 1.0;
+        const ox = def.anim === 'overhead' ? Math.sin(p.facing) * 1.4 : 0;
+        const oz = def.anim === 'overhead' ? Math.cos(p.facing) * 1.4 : 0;
+        this.particles.emit({ x: g.x + ox + Math.cos(a) * r, y: g.y + 0.15, z: g.z + oz + Math.sin(a) * r, count: 2, color: [0x8a7a60, 0xa89878], speed: 1.5, up: 1, gravity: -2, life: [0.4, 0.8], size: [0.12, 0.22], grow: 0.25 });
       }
+    }
+    if (struckEnemy) {
+      this.hitStop = def.hitStop;
+      this.cameraCtl.shake(def.shake);
+    } else if (def.anim === 'spin' || def.anim === 'overhead') {
+      this.cameraCtl.shake(def.shake * 0.4);
     }
   }
 
@@ -591,6 +659,12 @@ export class Game {
 
   update(dt: number): void {
     if (!this.playing) return;
+    // freeze-frame after a solid hit: the world holds its breath for a few frames
+    if (this.hitStop > 0) {
+      this.hitStop -= dt;
+      this.particles.update(dt * 0.15);
+      return;
+    }
     this.time += dt;
     this.data.stats.playTime += dt;
     this.scheduler.update(dt);
@@ -614,6 +688,7 @@ export class Game {
       onPandurDown: (e) => {
         this.data.stats.pandursBeaten++;
         this.sfx('death', e.position);
+        if (this.rng() < 0.6) this.bark(e.model.root, line(PANDUR_DOWN, this.rng), 3);
         this.particles.emit({ x: e.position.x, y: e.position.y + 0.3, z: e.position.z, count: 16, color: [0x6a5a40, 0x8a7a60], speed: 2, up: 1.5 });
       },
       onAlert: () => {
@@ -622,6 +697,8 @@ export class Game {
       },
       onDefeated: () => {
         this.toast('Panská hliadka je porazená!', 'good');
+        const speaker = this.companions.find((c) => c.isAlive());
+        if (speaker) this.scheduler.after(2, () => this.bark(speaker.model.root, line(AFTER_FIGHT, this.rng), 4));
         this.events.emit('combat:end', { won: true });
         this.quests.advance('c3_prepad');
       },
@@ -630,6 +707,7 @@ export class Game {
         if (story) this.scheduler.after(8, () => this.data.questStep === 'c3_prepad' && !this.ambush.active && this.spawnStoryCoach());
       },
       bark: (t, text, s) => this.bark(t, text, s),
+      hearing: 1 - this.weather.rain * 0.35 - this.weather.wind * 0.1,
     });
     if (wasCombat && !this.ambush.combatActive && !this.ambush.defeated) this.events.emit('combat:end', { won: false });
 
@@ -651,6 +729,9 @@ export class Game {
     this.separateActors();
 
     this.dayNight.update(dt);
+    this.weather.update(dt, this.rng);
+    this.world.setWetness(this.weather.wetness);
+    this.emitRainSplashes();
     this.world.update(dt, this.time);
     this.particles.update(dt);
     this.emitFireParticles();
@@ -658,6 +739,7 @@ export class Game {
     this.updateInteraction();
     this.handleHotkeys();
     this.checkDeath(dt);
+    this.updateBanter(dt);
 
     this.autosaveTimer += dt;
     if (this.autosaveTimer > 45) {
@@ -685,6 +767,21 @@ export class Game {
       this.particles.emit({ x: v.x, y: v.y + 2, z: v.z, count: 40, color: [0xffd050, 0xff8a2a, 0xffffff], speed: 5, up: 4 });
       this.toast('Legendárny skok cez vatru! Starí zbojníci by plakali od dojatia.', 'quest');
       this.quests.advance('c1_skok');
+    }
+  }
+
+  /** Tiny splashes around the captain while it rains. */
+  private emitRainSplashes(): void {
+    const r = this.weather.rain;
+    if (r < 0.15) return;
+    const p = this.player.position;
+    const count = r * 2.5;
+    for (let i = 0; i < count; i++) {
+      if (this.rng() > count - i) break;
+      const x = p.x + (this.rng() - 0.5) * 18;
+      const z = p.z + (this.rng() - 0.5) * 18;
+      const y = Math.max(this.world.groundHeight(x, z), -0.9) + 0.03;
+      this.particles.emit({ x, y, z, count: 1, spread: 0, speed: 0.6, up: 1.1, gravity: -9, drag: 1, color: [0xdfe8ee, 0xbcc8d0], life: [0.18, 0.3], size: [0.035, 0.06] });
     }
   }
 
@@ -767,16 +864,131 @@ export class Game {
   }
 
   private handleHotkeys(): void {
-    if (!this.player.isAlive()) return;
-    const keys: [Parameters<InputSystem['justPressed']>[0], ItemId][] = [
-      ['item1', 'slanina'],
-      ['item2', 'parenica'],
-      ['item3', 'halusky'],
-      ['item4', 'borovicka'],
-    ];
-    for (const [action, item] of keys) if (this.input.justPressed(action)) this.useItem(item);
+    if (!this.player.isAlive()) {
+      this.setEmoteMenu(false);
+      return;
+    }
+    if (this.input.justPressed('emote')) this.setEmoteMenu(!this.emoteMenu);
+    if (this.emoteMenu) {
+      // while the emote menu is open the number keys pick an emote instead of food
+      for (let i = 0; i < EMOTES.length; i++) {
+        if (this.input.codePressed(`Digit${i + 1}`)) {
+          this.setEmoteMenu(false);
+          this.playEmote(EMOTES[i].id);
+          return;
+        }
+      }
+    } else {
+      const keys: [Parameters<InputSystem['justPressed']>[0], ItemId][] = [
+        ['item1', 'slanina'],
+        ['item2', 'parenica'],
+        ['item3', 'halusky'],
+        ['item4', 'borovicka'],
+      ];
+      for (const [action, item] of keys) if (this.input.justPressed(action)) this.useItem(item);
+    }
     if (this.input.justPressed('fujara')) this.playFujara();
     if (this.input.justPressed('map')) this.hud.toggleBigMap();
+  }
+
+  setEmoteMenu(open: boolean): void {
+    if (this.emoteMenu === open) return;
+    this.emoteMenu = open;
+    this.hud.showEmotes(open ? EMOTES.map((e) => e.name) : null);
+  }
+
+  /** B-menu emotes: wave, odzemok, Hej-hou!, laugh, sit. */
+  playEmote(id: EmoteId): void {
+    const p = this.player;
+    if (!p.isAlive() || p.attacking) return;
+    if (this.ambush.combatActive && id !== 'hej') {
+      this.toast('Teraz nie je čas na parádu – bij pandúrov!', 'bad');
+      return;
+    }
+    switch (id) {
+      case 'wave':
+        p.playEmote('wave', 2.2);
+        this.reactNearby(VILLAGER_WAVE, 'wave');
+        break;
+      case 'odzemok': {
+        p.playEmote('odzemok', 5.5);
+        this.audio.playDance(5.5);
+        this.companions.forEach((c, i) => {
+          if (c.isAlive() && c.position.distanceTo(p.position) < 14) {
+            this.scheduler.after(0.3 + i * 0.25, () => c.playEmote('odzemok', 5.2 - i * 0.25));
+          }
+        });
+        this.reactNearby(VILLAGER_DANCE, 'cheer');
+        if (this.time >= this.odzemokReadyAt) {
+          this.odzemokReadyAt = this.time + 45;
+          this.scheduler.after(5, () => {
+            if (p.pose !== 'odzemok') return;
+            p.raz = Math.min(100, p.raz + 12);
+            this.toast('Odzemok rozprúdil krv v žilách! Ráž +12', 'good');
+          });
+        }
+        break;
+      }
+      case 'hej':
+        p.playEmote('cheer', 1.8);
+        this.bark(p.model.root, 'Hej-hou!', 1.8);
+        this.sfx('quest');
+        this.companions.forEach((c, i) => {
+          if (!c.isAlive()) return;
+          this.scheduler.after(0.5 + i * 0.3, () => {
+            c.playEmote('cheer', 1.5);
+            this.bark(c.model.root, i === 2 ? 'Hej-hou-hou-hou!' : 'Hej-hou!', 1.6);
+          });
+        });
+        break;
+      case 'laugh':
+        p.playEmote('laugh', 2.5);
+        this.bark(p.model.root, 'Hahaha!', 2);
+        this.reactNearby(VILLAGER_LAUGH);
+        break;
+      case 'sit':
+        p.playEmote('sit', Infinity);
+        this.toastOnce('sit', 'Oddychuješ – sila sa obnovuje dvakrát rýchlejšie. Pohni sa a vstaneš.', 'info', 60);
+        break;
+    }
+  }
+
+  /** The nearest standing villager answers an emote. */
+  private reactNearby(pool: readonly string[], pose?: 'wave' | 'cheer'): void {
+    let best: Npc | null = null;
+    let bestD = 12;
+    for (const n of this.npcs.values()) {
+      if (n.basePose !== 'normal' || !n.model.root.visible) continue;
+      const d = n.position.distanceTo(this.player.position);
+      if (d < bestD) {
+        bestD = d;
+        best = n;
+      }
+    }
+    const npc = best;
+    if (!npc) return;
+    this.scheduler.after(0.7, () => {
+      this.bark(npc.model.root, line(pool, this.rng), 3.5);
+      if (pose) npc.playEmote(pose, 2);
+    });
+  }
+
+  /** Companions chat on the road – what they say depends on weather, time and the captain. */
+  private updateBanter(dt: number): void {
+    this.banterTimer -= dt;
+    if (this.banterTimer > 0) return;
+    this.banterTimer = 45 + this.rng() * 45;
+    if (this.ambush.combatActive || !this.player.isAlive()) return;
+    const near = this.companions.filter((c) => c.isAlive() && c.position.distanceTo(this.player.position) < 15);
+    if (near.length === 0) return;
+    const c = near[Math.floor(this.rng() * near.length)];
+    const pp = this.player.position;
+    let pool: readonly string[] = BANTER[c.id];
+    if (this.weather.rain > 0.4 && this.rng() < 0.6) pool = BANTER_RAIN;
+    else if (this.dayNight.night > 0.6 && this.rng() < 0.45) pool = BANTER_NIGHT;
+    else if (this.world.isMud(pp.x, pp.z)) pool = BANTER_MUD;
+    else if (this.player.hp < this.player.maxHp * 0.35) pool = BANTER_HURT;
+    this.bark(c.model.root, line(pool, this.rng), 5);
   }
 
   private checkDeath(dt: number): void {
@@ -832,9 +1044,34 @@ export class Game {
     for (const n of this.npcs.values()) n.render(alpha, frameDt);
     this.ambush.render(alpha, frameDt, this.time);
 
+    if (this.debugPose) {
+      const dp = this.debugPose;
+      for (let i = 0; i < 8; i++) {
+        this.player.model.update(0.1, { speed: 0, onGround: true, attack: dp.t, attackKind: dp.kind, aim: 0, pose: 'normal', hurt: 0 });
+      }
+    }
+
+    // swing trail behind the valaška during the striking part of each blow
+    const cur = this.player.current;
+    let swinging = false;
+    if (cur) {
+      const t = this.player.swingProgress;
+      swinging = cur.anim === 'spin' ? t > 0.26 && t < 0.86 : t > cur.hitAt - 0.24 && t < cur.hitAt + 0.1;
+    }
+    this.player.model.root.updateMatrixWorld(true);
+    if (this.player.model.weaponPoints(tmpA, tmpB)) this.trail.update(frameDt, swinging, tmpA, tmpB);
+
     this.cameraCtl.update(this.player.model.root.position, frameDt, false, this.player.aiming);
-    this.dayNight.apply(this.app, this.world, this.player.model.root.position, frameDt);
-    this.hud.setClock(`${this.dayNight.clock()} · ${this.dayNight.periodName()}`, this.dayNight.night > 0.5);
+    this.weather.render(frameDt, this.app.camera.position, this.player.position, this.audio, (x, z) =>
+      this.world.groundHeight(x, z),
+    );
+    this.dayNight.apply(this.app, this.world, this.player.model.root.position, frameDt, this.weather);
+    const w = this.weather.label();
+    this.hud.setClock(
+      `${this.dayNight.clock()} · ${this.dayNight.periodName()}${w ? ` · ${w}` : ''}`,
+      this.dayNight.night > 0.5,
+      this.weather.icon(this.dayNight.night > 0.5),
+    );
     this.audio.update(this.app.camera.position, this.cameraCtl.yaw);
 
     const obj = this.objectivePosition();
@@ -904,7 +1141,7 @@ export class Game {
     this.cameraCtl.orbit(tmpV.set(v.x, v.y + 2, v.z), 34, 14, this.menuTime);
     // the title screen lives in an eternal golden sunset by the bonfire
     this.dayNight.setTime(19.45);
-    this.dayNight.apply(this.app, this.world, v, frameDt);
+    this.dayNight.apply(this.app, this.world, v, frameDt, null);
     if (this.rng() < 0.6) {
       const f = this.world.fires[0];
       if (f) this.particles.emit({ x: f.pos.x, y: f.pos.y + 0.6, z: f.pos.z, count: 1, spread: 0.8, speed: 0.3, up: 2.2, gravity: 1.5, drag: 0.5, color: [0xffb040, 0xff6a10], life: [0.5, 1.1], size: [0.1, 0.2] });

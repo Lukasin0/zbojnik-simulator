@@ -8,6 +8,8 @@ export interface PlayerIntent {
   sprint: boolean;
   jump: boolean;
   attack: boolean;
+  /** Heavy spinning blow (middle mouse / Q). */
+  heavy: boolean;
   /** Shoot button held – aiming over the shoulder. */
   aim: boolean;
   /** Shoot button released – fire. */
@@ -28,6 +30,7 @@ export class PlayerInputHandler {
         sprint: false,
         jump: false,
         attack: false,
+        heavy: false,
         aim: false,
         shoot: false,
         aimYaw: cameraYaw,
@@ -49,6 +52,7 @@ export class PlayerInputHandler {
       sprint: this.input.isDown('sprint'),
       jump: this.input.justPressed('jump'),
       attack: this.input.justPressed('attack'),
+      heavy: this.input.justPressed('heavy'),
       aim: this.input.isDown('shoot'),
       shoot: this.input.justReleased('shoot'),
       aimYaw: cameraYaw,

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CharacterModel, type AnimParams, type CharacterLook, type Pose } from '@/components/character-model';
+import type { AttackAnim } from './attacks';
 import { PhysicsBody, type GroundProvider } from '@/components/physics-body';
 import type { HitSource, Hittable } from '@/systems/combat-system';
 import type { Faction } from '@/types/game-types';
@@ -19,6 +20,8 @@ export abstract class Actor implements Hittable {
   protected attackT = -1;
   protected aimT = 0;
   protected hurtT = 0;
+  protected attackKind: AttackAnim = 'overhead';
+  private emoteTimer = 0;
   talking = false;
 
   constructor(look: CharacterLook, parent: THREE.Object3D, hp: number) {
@@ -40,7 +43,33 @@ export abstract class Actor implements Hittable {
     return this.hp > 0;
   }
 
-  abstract receiveHit(damage: number, from: THREE.Vector3, source: HitSource): void;
+  abstract receiveHit(damage: number, from: THREE.Vector3, source: HitSource, force?: number): void;
+
+  /** Play an emote pose (wave, odzemok…) for `seconds` (Infinity = until cancelled). */
+  playEmote(pose: Pose, seconds: number): void {
+    if (!this.isAlive()) return;
+    this.pose = pose;
+    this.emoteTimer = seconds;
+  }
+
+  get emoting(): boolean {
+    return this.emoteTimer > 0;
+  }
+
+  cancelEmote(): void {
+    if (this.emoteTimer <= 0) return;
+    this.emoteTimer = 0;
+    if (this.isAlive()) this.pose = 'normal';
+  }
+
+  protected tickEmote(dt: number): void {
+    if (this.emoteTimer <= 0) return;
+    this.emoteTimer -= dt;
+    if (this.emoteTimer <= 0) {
+      this.emoteTimer = 0;
+      if (this.isAlive()) this.pose = 'normal';
+    }
+  }
 
   /** Call at the start of every fixed tick for render interpolation. */
   beginTick(): void {
@@ -80,6 +109,7 @@ export abstract class Actor implements Hittable {
       speed: this.body.horizontalSpeed,
       onGround: this.body.onGround,
       attack: this.attackT,
+      attackKind: this.attackKind,
       aim: this.aimT,
       pose: this.pose,
       hurt: this.hurtT,

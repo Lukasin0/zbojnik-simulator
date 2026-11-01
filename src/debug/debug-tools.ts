@@ -2,6 +2,8 @@ import type { Game } from '@/core/game';
 import type { GameLoop } from '@/core/game-loop';
 import { LOC } from '@/config/constants';
 import { QUEST_STEPS } from '@/systems/quest-system';
+import type { WeatherKind } from '@/world/weather';
+import type { AttackAnim } from '@/entities/attacks';
 
 interface DebugCommands {
   god(on?: boolean): string;
@@ -12,6 +14,9 @@ interface DebugCommands {
   heal(): string;
   look(yaw: number, pitch?: number): string;
   time(hours: number, speed?: number): string;
+  weather(kind: WeatherKind): string;
+  pose(kind: AttackAnim | null, t?: number): string;
+  face(yaw: number): string;
   state(): unknown;
   pools(): unknown;
 }
@@ -93,6 +98,19 @@ export function installDebugTools(game: Game, loop: GameLoop): void {
       if (speed !== undefined) game.dayNight.speed = speed;
       return `čas ${game.dayNight.clock()}`;
     },
+    weather(kind) {
+      game.weather.set(kind);
+      return `počasie → ${kind}`;
+    },
+    pose(kind, t = 0.5) {
+      game.debugPose = kind ? { kind, t } : null;
+      return kind ? `póza ${kind} @ ${t}` : 'póza vypnutá';
+    },
+    face(yaw) {
+      game.player.facing = yaw;
+      game.player.beginTick();
+      return `natočenie ${yaw}`;
+    },
     state() {
       return game.snapshot();
     },
@@ -100,5 +118,5 @@ export function installDebugTools(game: Game, loop: GameLoop): void {
       return { particles: game.particles.stats };
     },
   };
-  console.info('%cZbojník debug: F3 = overlay, window.zbojnik.{god, money, skip, coach, tp, heal, look, time, state, pools}', 'color:#d9b24a');
+  console.info('%cZbojník debug: F3 = overlay, window.zbojnik.{god, money, skip, coach, tp, heal, look, time, weather, state, pools}', 'color:#d9b24a');
 }

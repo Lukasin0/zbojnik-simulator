@@ -55,7 +55,9 @@ export function createControlsPanel(onClose: () => void): HTMLDivElement {
       <kbd>Myš</kbd><span>otáčanie kamery (klikni do hry), koliesko = priblíženie</span>
       <kbd>Shift</kbd><span>šprint (míňa silu)</span>
       <kbd>Medzerník</kbd><span>skok – so šprintom zbojnícky výskok</span>
-      <kbd>Ľavé tl. / J</kbd><span>sek valaškou</span>
+      <kbd>Ľavé tl. / J</kbd><span>sek valaškou – klikaj v rytme pre 3-úderové kombo</span>
+      <kbd>Stredné tl. / Q</kbd><span>valaškový vír – silný úder dookola (veľa sily)</span>
+      <kbd>B</kbd><span>emócie: mávanie, odzemok, Hej-hou!, smiech, sadnúť si</span>
       <kbd>Pravé tl. / F</kbd><span>drž = mierenie cez rameno, pusti = výstrel z kresadlovky</span>
       <kbd>E</kbd><span>hovoriť / použiť</span>
       <kbd>G</kbd><span>zahrať na fujare (ráž, uspávanie pandúrov)</span>

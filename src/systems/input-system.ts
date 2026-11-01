@@ -6,6 +6,8 @@ export type Action =
   | 'jump'
   | 'sprint'
   | 'attack'
+  | 'heavy'
+  | 'emote'
   | 'shoot'
   | 'interact'
   | 'pause'
@@ -25,6 +27,8 @@ const KEY_BINDINGS: Record<Action, readonly string[]> = {
   jump: ['Space'],
   sprint: ['ShiftLeft', 'ShiftRight'],
   attack: ['KeyJ'],
+  heavy: ['KeyQ'],
+  emote: ['KeyB'],
   shoot: ['KeyF'],
   interact: ['KeyE'],
   pause: ['Escape', 'KeyP'],
@@ -39,6 +43,7 @@ const KEY_BINDINGS: Record<Action, readonly string[]> = {
 
 const MOUSE_BINDINGS: Partial<Record<Action, readonly number[]>> = {
   attack: [0],
+  heavy: [1],
   shoot: [2],
 };
 
@@ -50,7 +55,9 @@ const PAD_BINDINGS: Partial<Record<Action, readonly number[]>> = {
   attack: [2, 7],
   shoot: [6, 5],
   fujara: [3],
-  sprint: [10, 4],
+  sprint: [10],
+  heavy: [4],
+  emote: [11],
   pause: [9],
   map: [8],
   item1: [12],
@@ -120,6 +127,8 @@ export class InputSystem {
 
   private onMouseDown = (e: MouseEvent): void => {
     this.lastKeyUse = performance.now();
+    // middle click would start the browser's auto-scroll
+    if (e.button === 1) e.preventDefault();
     if (this.lockOnClick && !this.locked) {
       this.requestPointerLock();
       return;

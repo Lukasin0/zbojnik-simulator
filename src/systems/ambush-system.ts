@@ -6,6 +6,7 @@ import type { Actor } from '@/entities/actor';
 import type { World } from '@/world/world';
 import { Npc } from '@/entities/npc';
 import { ZEMAN } from '@/entities/looks';
+import { PANDUR_ALERT, PANDUR_HIT, PANDUR_LOG, PANDUR_SLEEP, PANDUR_WAKE, line } from '@/story/lines';
 
 export interface EncounterOptions {
   startX: number;
@@ -26,6 +27,8 @@ export interface AmbushContext {
   onDefeated(): void;
   onEscaped(story: boolean): void;
   bark(target: THREE.Object3D, text: string, seconds?: number): void;
+  /** Multiplier on the pandúri's alert radius (rain and wind mask footsteps). */
+  hearing: number;
 }
 
 const ESCORT_SLOTS: [number, number][] = [
@@ -41,6 +44,7 @@ const tmp = new THREE.Vector3();
 export class AmbushSystem {
   coach: Coach | null = null;
   escorts: Pandur[] = [];
+  private readonly hitsSeen = new Map<Pandur, number>();
   noble: Npc | null = null;
   alerted = false;
   looted = false;
@@ -103,6 +107,7 @@ export class AmbushSystem {
     this.coach = null;
     for (const e of this.escorts) e.dispose();
     this.escorts = [];
+    this.hitsSeen.clear();
     this.noble?.dispose();
     this.noble = null;
   }
@@ -121,7 +126,7 @@ export class AmbushSystem {
     this.escorts.forEach((e) => e.alert());
     if (this.coach && this.coach.state === 'driving') this.coach.state = 'stopped';
     const loud = this.escorts.find((e) => e.isAlive());
-    if (loud) ctx.bark(loud.model.root, 'Zbojníci! Do zbrane!', 2.5);
+    if (loud) ctx.bark(loud.model.root, line(PANDUR_ALERT), 2.8);
     ctx.onAlert();
   }
 
@@ -153,7 +158,7 @@ export class AmbushSystem {
       this.atLog = true;
       coach.state = 'stopped';
       const first = this.escorts[0];
-      if (first) ctx.bark(first.model.root, 'Čo to má byť?! Strom na ceste!', 3);
+      if (first) ctx.bark(first.model.root, line(PANDUR_LOG), 3);
     }
     coach.update(dt, !this.alerted && !blocked, ground);
 
@@ -177,7 +182,7 @@ export class AmbushSystem {
         for (const e of this.escorts) {
           if (e.state !== 'sleepy' && e.isAlive()) {
             e.fallAsleep();
-            ctx.bark(e.model.root, 'Zzz… tá fujara… zzz', 3);
+            ctx.bark(e.model.root, line(PANDUR_SLEEP), 3.5);
           }
         }
       }
@@ -191,7 +196,8 @@ export class AmbushSystem {
           this.alertAll(ctx);
           break;
         }
-        const radius = e.state === 'sleepy' ? PANDUR_TUNING.sleepyAlertRadius : PANDUR_TUNING.alertRadius;
+        const radius =
+          (e.state === 'sleepy' ? PANDUR_TUNING.sleepyAlertRadius : PANDUR_TUNING.alertRadius) * ctx.hearing;
         for (const z of ctx.zbojnici) {
           if (z.isAlive() && z.position.distanceTo(e.position) < radius) {
             this.alertAll(ctx);
@@ -203,12 +209,18 @@ export class AmbushSystem {
 
     const targets = ctx.zbojnici.filter((z) => z.isAlive());
     for (const e of this.escorts) {
+      // the occasional complaint after taking a hit
+      const seen = this.hitsSeen.get(e) ?? 0;
+      if (e.hitsTaken > seen) {
+        this.hitsSeen.set(e, e.hitsTaken);
+        if (e.isAlive() && Math.random() < 0.35) ctx.bark(e.model.root, line(PANDUR_HIT), 2);
+      }
       e.update(dt, {
         world: this.world,
         targets,
         onStrike: (en, t) => ctx.onStrike(en, t),
         onDeath: (en) => ctx.onPandurDown(en),
-        onWake: (en) => ctx.bark(en.model.root, 'Hm?! Čo… kto…?!', 2),
+        onWake: (en) => ctx.bark(en.model.root, line(PANDUR_WAKE), 2.5),
       });
     }
     this.noble?.update(dt, this.world, ctx.zbojnici[0]?.position ?? coach.position);

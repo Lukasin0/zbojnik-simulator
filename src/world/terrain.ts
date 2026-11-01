@@ -78,11 +78,12 @@ export function heightAt(x: number, z: number): number {
   return h;
 }
 
-export function isMud(x: number, z: number): boolean {
+/** `wet` 0..1 – after rain the mud patches grow. */
+export function isMud(x: number, z: number, wet = 0): boolean {
   const dRoad = Math.abs(z - roadZ(x));
-  if (dRoad < ROAD_HALF_WIDTH + 0.5 && valueNoise(x * 0.09, z * 0.09) > 0.62) return true;
+  if (dRoad < ROAD_HALF_WIDTH + 0.5 + wet && valueNoise(x * 0.09, z * 0.09) > 0.62 - wet * 0.14) return true;
   const dv = Math.hypot(x - LOC.village.x, z - LOC.village.z);
-  return dv < 40 && valueNoise(x * 0.13 + 40, z * 0.13) > 0.74;
+  return dv < 40 && valueNoise(x * 0.13 + 40, z * 0.13) > 0.74 - wet * 0.12;
 }
 
 export function isRoad(x: number, z: number): boolean {

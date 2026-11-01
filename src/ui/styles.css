@@ -663,6 +663,46 @@ textarea.save-code {
   white-space: nowrap;
 }
 
+.emotes {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  transform: translate(-50%, 10px);
+  background: linear-gradient(180deg, rgba(42, 28, 19, 0.94), rgba(28, 19, 13, 0.94));
+  border: 1px solid var(--wood-edge);
+  border-radius: 8px;
+  padding: 10px 16px 12px;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100vw - 32px);
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+
+.emotes.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.emotes-title {
+  width: 100%;
+  text-align: center;
+  font-family: var(--display);
+  color: var(--gold);
+  font-size: 14px;
+}
+
+.emote {
+  font-family: var(--display);
+  font-size: 16px;
+  white-space: nowrap;
+}
+
 .prompt {
   position: absolute;
   left: 50%;

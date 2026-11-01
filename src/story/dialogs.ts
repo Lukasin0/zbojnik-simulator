@@ -7,6 +7,17 @@ import { HaluskyGame } from '@/minigames/halusky';
 import { PakaGame } from '@/minigames/paka';
 import type { CompanionId, ItemId, NpcId } from '@/types/game-types';
 import type { DialogNode, DialogOption } from '@/ui/dialog';
+import {
+  BACA_WISDOM,
+  KOVAC_JOKES,
+  KRCMAR_GOSSIP,
+  VILLAGER_HIGH,
+  VILLAGER_LOW,
+  VILLAGER_MID,
+  ZEMAN_AFTER,
+  ZEMAN_PLEA,
+  line,
+} from './lines';
 
 export interface Interactable {
   id: string;
@@ -179,6 +190,10 @@ function krcmarDialog(game: Game): DialogNode {
     talk(game, 'krcmar', 'Čo si dáš, kapitán? Slanina je dnes ešte teplá a borovička studená. Ako má byť.', [
       buyOption(game, 'slanina', ITEMS.slanina.price - discount, node),
       buyOption(game, 'borovicka', ITEMS.borovicka.price - discount, node),
+      {
+        label: 'Čo nové v dedine?',
+        action: () => talk(game, 'krcmar', line(KRCMAR_GOSSIP, game.rng), [{ label: 'Hehe. Ešte niečo?', action: node }, bye]),
+      },
       bye,
     ]);
   return node();
@@ -254,6 +269,10 @@ function bacaDialog(game: Game): DialogNode {
       });
     }
     options.push({ label: 'Kúpiť syr a bryndzu', action: shop });
+    options.push({
+      label: 'Povedz nejakú múdrosť, bača.',
+      action: () => t(line(BACA_WISDOM, game.rng), [{ label: 'Hlboké… asi.', action: () => main() }]),
+    });
     options.push({ label: 'Ako sa robia bryndzové halušky?', action: recipe });
     options.push(bye);
     return t('Vitaj na salaši, synak. Sadni si, oddýchni. Čo ťa privádza?', options);
@@ -352,9 +371,14 @@ function kovacDialog(game: Game): DialogNode {
         },
       });
     }
+    const wares = options.length;
+    options.push({
+      label: 'Čo sa kuje, majster?',
+      action: () => talk(game, 'kovac', line(KOVAC_JOKES, game.rng), [{ label: 'Hehe. Späť k obchodu.', action: node }]),
+    });
     options.push(bye);
     const text =
-      options.length > 1
+      wares > 0
         ? 'Opasky, krpce, klobúky – všetko pre poriadneho zbojníka. Lacno to nebude, železo je drahé a páni berú daň aj z kladiva.'
         : 'Už máš všetko, čo ti môžem ukuť, kapitán. Ešte tak zlatú valašku… ale na tú by si musel prepadnúť samotného cisára.';
     return talk(game, 'kovac', text, options);
@@ -440,13 +464,7 @@ function janDialog(game: Game): DialogNode {
 
 function villagerLine(game: Game): string {
   const rep = game.data.reputation;
-  const lines =
-    rep >= 40
-      ? ['To je on! Jánošík! Nech ti Boh žehná, kapitán!', 'Moja Anička o tebe spieva celé dni.', 'Pre teba vždy otvorím dvere aj komoru.']
-      : rep >= 10
-        ? ['Vraj si dal Kataríne dukáty. Pekne od teba.', 'Panskí drábi ťa hľadajú. Ja som ťa nevidel.', 'Na hradskej je blato po kolená, daj si pozor.']
-        : ['Ďalší zbojník… len aby si nám nepriniesol pandúrov na krk.', 'Hm. Zbojník. Mám len dve kozy a tie ti nedám.', 'Hmla ako mlieko. V takom počasí ani pes nevystrčí nos.'];
-  return lines[Math.floor(game.rng() * lines.length)];
+  return line(rep >= 40 ? VILLAGER_HIGH : rep >= 10 ? VILLAGER_MID : VILLAGER_LOW, game.rng);
 }
 
 // --------------------------------------------------------------------------- registry
@@ -546,13 +564,13 @@ export function createInteractables(game: Game): Interactable[] {
         };
         game.openDialog({
           speaker,
-          text: 'Ó, pán zbojník, ja som len chudobný zeman! Doma mám deväť hladných psov, tri hladné grófky a jedného veľmi hladného hajdúcha…',
+          text: line(ZEMAN_PLEA, game.rng),
           options: [
             {
               label: 'Dukáty sem, Vaša Milosť!',
               action: () => {
                 game.lootCoach(0);
-                return end('Toto bude mať dohru u stoličného súdu! … Ehm, teda… pekný deň prajem, páni zbojníci.');
+                return end(line(ZEMAN_AFTER, game.rng));
               },
             },
             {

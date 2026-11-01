@@ -45,6 +45,9 @@ export class Npc extends Actor {
 
   update(dt: number, world: GroundProvider, playerPos: THREE.Vector3): void {
     this.beginTick();
+    const wasEmoting = this.emoting;
+    this.tickEmote(dt);
+    if (wasEmoting && !this.emoting) this.pose = this.basePose;
     const near = playerPos.distanceTo(this.position) < 6;
     let vx = 0;
     let vz = 0;

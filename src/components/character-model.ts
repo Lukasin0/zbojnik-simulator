@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { damp, easeInQuad, easeOutCubic, lerp } from '@/utils/math-utils';
 import { at, part, stripeTexture } from '@/world/materials';
+import type { AttackAnim } from '@/entities/attacks';
 
 export type HatStyle = 'zbojnik' | 'shako' | 'cap' | 'wig' | 'kerchief' | 'bacov' | 'none';
 export type WeaponStyle = 'valaska' | 'saber' | 'staff' | 'none';
-export type Pose = 'normal' | 'dead' | 'sit' | 'sleep' | 'cheer' | 'downed';
+export type Pose = 'normal' | 'dead' | 'sit' | 'sleep' | 'cheer' | 'downed' | 'wave' | 'laugh' | 'odzemok';
 
 export interface CharacterLook {
   skin: number;
@@ -41,6 +42,7 @@ export interface AnimParams {
   onGround: boolean;
   /** -1 = no attack, else 0..1 progress */
   attack: number;
+  attackKind?: AttackAnim;
   /** 0..1 aim blend (pistol pose) */
   aim: number;
   pose: Pose;
@@ -50,6 +52,88 @@ export interface AnimParams {
 }
 
 const LEG_TOP = 0.92;
+
+interface AttackPose {
+  armX: number;
+  armZ: number;
+  torsoY: number;
+  torsoX: number;
+  bodyY: number;
+  spin: number;
+  armLx?: number;
+  armLz?: number;
+}
+
+/** Progress of `t` inside [a, b], clamped to 0..1. */
+function seg(t: number, a: number, b: number): number {
+  return Math.min(1, Math.max(0, (t - a) / (b - a)));
+}
+
+/**
+ * Keyframed weapon-arm poses. The weapon arm sits on +X: rotation.z > 0 swings it outward,
+ * < 0 across the chest; a positive torso yaw pulls the weapon shoulder back (wind-up).
+ */
+function attackPose(kind: AttackAnim, t: number): AttackPose {
+  const rest = { armX: -0.12, armZ: 0.08, torsoY: 0, torsoX: 0 };
+  switch (kind) {
+    case 'slashR': {
+      // diagonal forehand: high and wide → low across the body
+      const w = easeOutCubic(seg(t, 0, 0.36));
+      const s = easeInQuad(seg(t, 0.36, 0.6));
+      const r = seg(t, 0.6, 1);
+      const armX = lerp(lerp(lerp(rest.armX, -2.5, w), -0.8, s), rest.armX, r);
+      const armZ = lerp(lerp(lerp(rest.armZ, 1.25, w), -0.75, s), rest.armZ, r);
+      const torsoY = lerp(lerp(lerp(0, 0.5, w), -0.6, s), 0, r);
+      return { armX, armZ, torsoY, torsoX: 0.15 * s * (1 - r), bodyY: -0.04 * s * (1 - r), spin: 0, armLz: -0.5 * w * (1 - r) };
+    }
+    case 'slashL': {
+      // backhand: from across the chest sweeping outward
+      const w = easeOutCubic(seg(t, 0, 0.32));
+      const s = easeInQuad(seg(t, 0.32, 0.56));
+      const r = seg(t, 0.56, 1);
+      const armX = lerp(lerp(lerp(rest.armX, -1.75, w), -1.45, s), rest.armX, r);
+      const armZ = lerp(lerp(lerp(rest.armZ, -1.1, w), 1.35, s), rest.armZ, r);
+      const torsoY = lerp(lerp(lerp(0, -0.65, w), 0.6, s), 0, r);
+      return { armX, armZ, torsoY, torsoX: 0.08 * s * (1 - r), bodyY: 0, spin: 0, armLz: -0.7 * s * (1 - r) };
+    }
+    case 'overhead': {
+      // leap and chop from above
+      const w = easeOutCubic(seg(t, 0, 0.42));
+      const s = easeInQuad(seg(t, 0.42, 0.6));
+      const r = seg(t, 0.6, 1);
+      const armX = lerp(lerp(lerp(rest.armX, -3.35, w), -0.7, s), rest.armX, r);
+      const hop = Math.sin(seg(t, 0, 0.6) * Math.PI) * 0.28;
+      const impact = -0.14 * s * (1 - r);
+      return {
+        armX,
+        armZ: 0.15,
+        torsoY: lerp(lerp(0, 0.3, w), -0.2, s) * (1 - r),
+        torsoX: -0.18 * w * (1 - s) + 0.38 * s * (1 - r),
+        bodyY: hop + impact,
+        spin: 0,
+        armLx: -1.2 * w * (1 - r),
+      };
+    }
+    case 'spin': {
+      // crouch, then a full turn with the valaška held out at arm's length
+      const w = easeOutCubic(seg(t, 0, 0.28));
+      const sp = seg(t, 0.28, 0.82);
+      const r = seg(t, 0.82, 1);
+      const out = w * (1 - r);
+      return {
+        armX: lerp(rest.armX, -0.45, out),
+        armZ: lerp(rest.armZ, 1.5, out),
+        torsoY: 0.55 * w * (1 - sp),
+        torsoX: 0.12 * out,
+        bodyY: -0.14 * out,
+        // ends at exactly one full turn, which looks identical to the rest pose
+        spin: -sp * sp * (3 - 2 * sp) * Math.PI * 2,
+        armLx: -0.3 * out,
+        armLz: -1.3 * out,
+      };
+    }
+  }
+}
 
 function merged(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
   const prepared = parts.map((g) => {
@@ -83,7 +167,9 @@ export class CharacterModel {
   private phase = Math.random() * 10;
   private breath = Math.random() * 10;
   private poseBlend = 0;
+  private poseTime = 0;
   private currentPose: Pose = 'normal';
+  private weaponHolder: THREE.Group | null = null;
   private stride = 0;
   private air = 0;
 
@@ -233,6 +319,7 @@ export class CharacterModel {
     const holder = new THREE.Group();
     holder.position.y = -0.55;
     this.shoulderR.add(holder);
+    this.weaponHolder = holder;
     if (w === 'valaska') {
       holder.add(at(part(new THREE.CylinderGeometry(0.018, 0.022, 0.88, 6), 0x7a4a26), 0, -0.36, 0));
       const blade = part(new THREE.BoxGeometry(0.025, 0.13, 0.17), 0xb9bec4, { metalness: 0.75, roughness: 0.35 });
@@ -350,7 +437,9 @@ export class CharacterModel {
     if (p.pose !== this.currentPose) {
       this.currentPose = p.pose;
       this.poseBlend = 0;
+      this.poseTime = 0;
     }
+    this.poseTime += dt;
     this.poseBlend = Math.min(1, this.poseBlend + dt * (p.pose === 'dead' ? 2.2 : 3.5));
     this.breath += dt * 2.2;
 
@@ -375,16 +464,17 @@ export class CharacterModel {
     let torsoRy = 0;
     let headRx = p.talking ? Math.sin(this.breath * 3) * 0.05 : 0;
 
+    let spin = 0;
     if (p.attack >= 0) {
-      const t = p.attack;
-      let a: number;
-      if (t < 0.38) a = lerp(-0.1, -3.35, easeOutCubic(t / 0.38));
-      else if (t < 0.6) a = lerp(-3.35, -0.75, easeInQuad((t - 0.38) / 0.22));
-      else a = lerp(-0.75, -0.1, (t - 0.6) / 0.4);
-      armR = a;
-      armRz = 0.15;
-      torsoRy = t < 0.38 ? lerp(0, 0.35, t / 0.38) : lerp(0.35, -0.25, Math.min(1, (t - 0.38) / 0.3));
-      torsoRx += t > 0.38 && t < 0.7 ? 0.2 : 0;
+      const a = attackPose(p.attackKind ?? 'overhead', p.attack);
+      armR = a.armX;
+      armRz = a.armZ;
+      torsoRy = a.torsoY;
+      torsoRx += a.torsoX;
+      bodyY += a.bodyY;
+      spin = a.spin;
+      if (a.armLz !== undefined) armLz = a.armLz;
+      if (a.armLx !== undefined) armL = a.armLx;
     }
     if (p.aim > 0) {
       armR = lerp(armR, -1.55, p.aim);
@@ -424,6 +514,44 @@ export class CharacterModel {
         armRz = 0.3;
         bodyY += Math.abs(Math.sin(this.breath * 3)) * 0.12;
         break;
+      case 'wave': {
+        armR = lerp(armR, -2.75, k);
+        armRz = lerp(armRz, 0.45 + Math.sin(this.poseTime * 9) * 0.45, k);
+        headRx = -0.1;
+        torsoRy = 0.15;
+        break;
+      }
+      case 'laugh': {
+        const shake = Math.sin(this.poseTime * 22) * 0.06;
+        torsoRx = lerp(torsoRx, -0.28 + shake, k);
+        headRx = -0.35 + shake;
+        armL = armR = -0.55;
+        armLz = 0.55;
+        armRz = -0.55;
+        bodyY += Math.abs(Math.sin(this.poseTime * 11)) * 0.03;
+        break;
+      }
+      case 'odzemok': {
+        // the shepherds' dance: deep squats, high kicks and the valaška twirling overhead
+        const beat = this.poseTime * 2.5 * Math.PI * 2;
+        const kick = Math.sin(beat);
+        const kickL = Math.max(0, kick);
+        const kickR = Math.max(0, -kick);
+        hipL = lerp(hipL, -0.5 - kickL * 1.0, k);
+        hipR = lerp(hipR, -0.5 - kickR * 1.0, k);
+        kneeL = lerp(kneeL, 1.0 - kickL * 0.95, k);
+        kneeR = lerp(kneeR, 1.0 - kickR * 0.95, k);
+        const hop = Math.max(0, Math.sin(beat * 0.25)) ** 4 * 0.45;
+        bodyY = lerp(bodyY, -0.24 + Math.abs(Math.cos(beat)) * 0.1 + hop, k);
+        armR = lerp(armR, -2.9 + Math.sin(beat * 0.5) * 0.35, k);
+        armRz = 0.25;
+        armL = -0.3;
+        armLz = -1.25 + Math.sin(beat) * 0.2;
+        torsoRx = -0.12;
+        torsoRy = Math.sin(beat * 0.5) * 0.25;
+        headRx = -0.1;
+        break;
+      }
       case 'normal':
         break;
     }
@@ -438,6 +566,7 @@ export class CharacterModel {
     this.shoulderR.rotation.z = armRz;
     this.body.position.y = bodyY;
     this.body.rotation.x = bodyRx;
+    this.body.rotation.y = spin;
     this.torso.rotation.x = torsoRx;
     this.torso.rotation.y = torsoRy;
     this.head.rotation.x = headRx;
@@ -446,6 +575,14 @@ export class CharacterModel {
   /** World position of the right hand (muzzle flashes, sparks). */
   handPosition(out: THREE.Vector3): THREE.Vector3 {
     return this.shoulderR.localToWorld(out.set(0, -0.6, 0));
+  }
+
+  /** World positions of the weapon grip and blade tip (for swing trails). */
+  weaponPoints(base: THREE.Vector3, tip: THREE.Vector3): boolean {
+    if (!this.weaponHolder) return false;
+    this.weaponHolder.localToWorld(base.set(0, -0.3, 0));
+    this.weaponHolder.localToWorld(tip.set(0, -0.82, -0.1));
+    return true;
   }
 
   setVisible(v: boolean): void {
