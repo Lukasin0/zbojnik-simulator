@@ -184,3 +184,50 @@ export const KOVAC_JOKES: readonly string[] = [
   'Kováč má vždy pravdu. Lebo má kladivo.',
   'Raz som ukul zemanovi brnenie. Musel som ho trikrát prerábať – vždy, keď sa naobedoval.',
 ];
+
+// ---------------------------------------------------------------- noc v dedine
+
+/** Somebody knocked them out of bed. */
+export const WOKEN: readonly string[] = [
+  'Kto to búcha o takomto čase?! …Ach, Jánošík. No čo už, poď.',
+  'Ak horí, tak hasím. Ak nehorí, tak ťa zabijem. …Nehorí? Tak čo chceš?',
+  'Práve sa mi snívalo o pečenej kačke. A ty si mi ju zjedol, kapitán.',
+  'V nočnej košeli sa so zbojníkmi nerozprávam. …No tak dobre, ale rýchlo.',
+  'Pšš! Žena spí. Ak ju zobudíš, bude to horšie ako pandúri.',
+  'Že vraj zbojníci chodia v noci. Ale prečo práve ku mne?',
+];
+
+export const WOKEN_KOVAC: readonly string[] = [
+  'Vyhňa je studená, ja som ešte studenší. Ale pre teba niečo nájdem.',
+  'Kto ma budí, tomu kujem podkovy naopak. …Ty si výnimka, kapitán.',
+];
+
+export const WOKEN_KATARINA: readonly string[] = [
+  'Juraj, chlapče! Že sa ti nechce spať… Ale stará Katarína nespí nikdy celkom.',
+  'Myslela som, že je to smrtka. Ty si krajší, ale klopeš rovnako.',
+];
+
+export const WOKEN_JAN: readonly string[] = [
+  'Brat môj, nemohol si prísť cez deň ako normálny človek? …Ach, áno. Nie si normálny človek.',
+  'Mama by ma zabila, keby vedela, že ti v noci otváram. Poď dnu, kým ťa niekto zbadá.',
+];
+
+/** Ponocný calls out the hour – {h} is replaced with the hour name. */
+export const PONOCNY_CALL: readonly string[] = [
+  'Chváľte Pána Boha, odbila {h}! Chráňte oheň i svetlo!',
+  'Počujte, ľudia, odbila {h}! Kto nespí, nech aspoň nechrápe!',
+  'Odbila {h}! Kuriatka do kurína, zbojníci do… ehm, dobrú noc!',
+  'Odbila {h}! Všetko pokojné – až na Ďurkov šenk.',
+];
+
+export const PONOCNY_TALK: readonly string[] = [
+  'Ja nič nevidím, kapitán. Ja som ponocný – ja len počítam hodiny.',
+  'Tridsať rokov chodím po dedine v noci. Ešte som nestretol strašidlo. Len teba.',
+  'Keď uvidím pandúra, zatrúbim trikrát. Keď uvidím teba, zakašlem a pozriem sa inam.',
+  'Lampáš mi dala obec. Olej si kupujem sám. Taká je to služba.',
+  'V noci počuť všetko – kto chrápe, kto sa háda, kto kradne slaninu z komory. To posledné bol Gajdošík.',
+];
+
+export const HOUR_NAMES = [
+  'polnoc', 'jedna', 'druhá', 'tretia', 'štvrtá', 'piata', 'šiesta', 'siedma', 'ôsma', 'deviata', 'desiata', 'jedenásta',
+] as const;

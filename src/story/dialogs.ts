@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ECONOMY, ITEMS, LOC } from '@/config/constants';
 import type { Game } from '@/core/game';
-import { BACA, FERO, GAJDOSIK, GAZDINA, ILCIK, JAN, KATARINA, KOVAC, KRCMAR, SEDLIAK, UHORCIK } from '@/entities/looks';
+import { BACA, FERO, GAJDOSIK, GAZDINA, ILCIK, JAN, KATARINA, KOVAC, KRCMAR, PONOCNY, SEDLIAK, UHORCIK } from '@/entities/looks';
 import { Npc } from '@/entities/npc';
 import { HaluskyGame } from '@/minigames/halusky';
 import { PakaGame } from '@/minigames/paka';
@@ -11,9 +11,14 @@ import {
   BACA_WISDOM,
   KOVAC_JOKES,
   KRCMAR_GOSSIP,
+  PONOCNY_TALK,
   VILLAGER_HIGH,
   VILLAGER_LOW,
   VILLAGER_MID,
+  WOKEN,
+  WOKEN_JAN,
+  WOKEN_KATARINA,
+  WOKEN_KOVAC,
   ZEMAN_AFTER,
   ZEMAN_PLEA,
   line,
@@ -34,6 +39,8 @@ export function createNpcs(game: Game): Npc[] {
   const v = LOC.vatra;
   const k = LOC.krcma;
   const face = (fx: number, fz: number, tx: number, tz: number): number => Math.atan2(tx - fx, tz - fz);
+  const doors = w.doors;
+  // the krčma, the bonfire and the salaš never sleep; everybody else goes to bed
   return [
     new Npc('uhorcik', 'Tomáš Uhorčík', UHORCIK, s, v.x + 3, v.z + 3.5, face(v.x + 3, v.z + 3.5, v.x, v.z), w),
     new Npc('ilcik', 'Ilčík', ILCIK, s, k.x - 11, k.z - 4.5, Math.PI / 2, w, 'sit'),
@@ -41,12 +48,13 @@ export function createNpcs(game: Game): Npc[] {
     new Npc('krcmar', 'Šenkár Ďurko', KRCMAR, s, k.x - 6, k.z + 1.5, -Math.PI / 2, w),
     new Npc('fero', 'Fero Silák', FERO, s, k.x - 7.5, k.z - 8, -Math.PI / 2, w),
     new Npc('baca', 'Bača Ondrej', BACA, s, LOC.salas.x + 3, LOC.salas.z - 4, face(LOC.salas.x + 3, LOC.salas.z - 4, LOC.kotlik.x, LOC.kotlik.z + 6), w),
-    new Npc('kovac', 'Kováč Mišo', KOVAC, s, LOC.shop.x + 1, LOC.shop.z - 2.6, Math.PI, w),
-    new Npc('katarina', 'Stará Katarína', KATARINA, s, LOC.poor.x, LOC.poor.z - 1.2, Math.PI, w),
-    new Npc('jan', 'Brat Ján', JAN, s, LOC.terchova.x, LOC.terchova.z + 4.2, 0, w),
-    new Npc('sedliak1', 'Sedliak Jano', SEDLIAK, s, 24, 24, 0, w, 'normal', 9),
-    new Npc('sedliak2', 'Sedliak Paľo', SEDLIAK, s, 38, 30, 1, w, 'normal', 6),
-    new Npc('gazdina', 'Gazdiná Mara', GAZDINA, s, 22, 12, 2, w, 'normal', 5),
+    new Npc('kovac', 'Kováč Mišo', KOVAC, s, LOC.shop.x + 1, LOC.shop.z - 2.6, Math.PI, w).sleepsAt(doors.kovac, 21.5, 6),
+    new Npc('katarina', 'Stará Katarína', KATARINA, s, LOC.poor.x, LOC.poor.z - 1.2, Math.PI, w).sleepsAt(doors.katarina, 20, 6.5),
+    new Npc('jan', 'Brat Ján', JAN, s, LOC.terchova.x, LOC.terchova.z + 4.2, 0, w).sleepsAt(doors.jan, 22, 5.5),
+    new Npc('sedliak1', 'Sedliak Jano', SEDLIAK, s, 24, 24, 0, w, 'normal', 9).sleepsAt(doors.jano, 21, 5),
+    new Npc('sedliak2', 'Sedliak Paľo', SEDLIAK, s, 38, 30, 1, w, 'normal', 6).sleepsAt(doors.palo, 20.5, 5.5),
+    new Npc('gazdina', 'Gazdiná Mara', GAZDINA, s, 22, 12, 2, w, 'normal', 5).sleepsAt(doors.mara, 20, 5),
+    new Npc('ponocny', 'Ponocný Ignác', PONOCNY, s, 32, 22, 0, w, 'normal', 18).sleepsAt(doors.ponocny, 5.5, 20.5),
   ];
 }
 
@@ -462,6 +470,31 @@ function janDialog(game: Game): DialogNode {
   return node();
 }
 
+/** At night a sleeping villager's door can be knocked on – they come out grumbling. */
+function knockAt(game: Game, id: NpcId): Interactable {
+  const pools: Partial<Record<NpcId, readonly string[]>> = { kovac: WOKEN_KOVAC, katarina: WOKEN_KATARINA, jan: WOKEN_JAN };
+  return {
+    id: `door-${id}`,
+    radius: 2.4,
+    position: () => game.npcs.get(id)?.door ?? new THREE.Vector3(0, -999, 0),
+    label: () => {
+      const npc = game.npcs.get(id);
+      return npc?.asleep ? `Zaklopať na dvere – ${npc.displayName} spí` : null;
+    },
+    act: () => {
+      const npc = game.npcs.get(id);
+      if (!npc) return;
+      game.sfx('chop', npc.position, 1.4);
+      game.scheduler.after(0.25, () => game.sfx('chop', npc.position, 1.5));
+      game.scheduler.after(1.2, () => {
+        npc.knock(game.world, game.player.position);
+        const own = pools[id];
+        game.bark(npc.model.root, line(own && game.rng() < 0.6 ? own : WOKEN, game.rng), 4.5);
+      });
+    },
+  };
+}
+
 function villagerLine(game: Game): string {
   const rep = game.data.reputation;
   return line(rep >= 40 ? VILLAGER_HIGH : rep >= 10 ? VILLAGER_MID : VILLAGER_LOW, game.rng);
@@ -522,6 +555,11 @@ export function createInteractables(game: Game): Interactable[] {
         },
       ),
     ),
+    npcAt(game, 'ponocny', 2.6, () => 'Ponocný Ignác – prihovoriť sa', () => {
+      const npc = game.npcs.get('ponocny');
+      if (npc) game.bark(npc.model.root, line(PONOCNY_TALK, game.rng), 4.5);
+    }),
+    ...(['kovac', 'katarina', 'jan', 'sedliak1', 'sedliak2', 'gazdina'] as const).map((id) => knockAt(game, id)),
     {
       id: 'kotlik',
       radius: 2.6,

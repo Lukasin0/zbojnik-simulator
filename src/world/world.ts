@@ -77,6 +77,8 @@ export class World implements GroundProvider, NightReceiver {
   /** Meshes the third-person camera must stay in front of. */
   readonly occluders: THREE.Object3D[] = [];
   readonly mist: Mist;
+  /** Where each villager goes to bed – a spot just outside their door. */
+  readonly doors: Record<string, THREE.Vector3> = {};
   /** Lanterns & forge – brighter after dark. */
   private readonly nightLights: { light: THREE.PointLight; base: number }[] = [];
   /** Shared window-glass material of every house – glows warm at night. */
@@ -329,20 +331,29 @@ export class World implements GroundProvider, NightReceiver {
     this.addBox(LOC.shop.x + 1.2, LOC.shop.z + 1.2, 1.6, 1.4);
     this.place(createHut(), LOC.poor.x, LOC.poor.z + 3, Math.PI, 5, 4.2);
 
-    const houses: [number, number, number][] = [
-      [8, 6, Math.PI / 2],
-      [14, -8, 0],
-      [46, -8, 0],
-      [18, 50, Math.PI],
-      [58, 32, -Math.PI / 2],
-      [0, 22, Math.PI / 2],
-      [58, -16, -Math.PI / 2],
+    this.doors.katarina = this.doorOf(LOC.poor.x, LOC.poor.z + 3, Math.PI, 4.2);
+
+    const houses: [number, number, number, string][] = [
+      [8, 6, Math.PI / 2, 'mara'],
+      [14, -8, 0, 'dom2'],
+      [46, -8, 0, 'ponocny'],
+      [18, 50, Math.PI, 'jano'],
+      [58, 32, -Math.PI / 2, 'palo'],
+      [0, 22, Math.PI / 2, 'kovac'],
+      [58, -16, -Math.PI / 2, 'dom7'],
     ];
-    for (const [x, z, r] of houses) {
+    for (const [x, z, r, owner] of houses) {
       const w = 6 + this.rng() * 2;
       const d = 5 + this.rng() * 2;
       this.place(createHouse({ w, d, h: 2.6 + this.rng() * 0.6, chimney: this.rng() > 0.4 }), x, z, r, w, d);
+      this.doors[owner] = this.doorOf(x, z, r, d);
     }
+  }
+
+  /** Spot just outside the door of a house placed at x/z with rotation r (door faces local +Z). */
+  private doorOf(x: number, z: number, r: number, depth: number): THREE.Vector3 {
+    const out = depth / 2 + 0.9;
+    return this.ground(x + Math.sin(r) * out, z + Math.cos(r) * out);
   }
 
   private buildRovnaHora(): void {
@@ -408,6 +419,7 @@ export class World implements GroundProvider, NightReceiver {
   private buildTerchova(): void {
     const t = LOC.terchova;
     this.place(createHouse({ w: 7, d: 5.5, h: 2.8, chimney: true }), t.x, t.z, 0, 7, 5.5);
+    this.doors.jan = this.doorOf(t.x, t.z, 0, 5.5);
     this.place(createHouse({ w: 6, d: 5, h: 2.6 }), t.x + 12, t.z + 10, -Math.PI / 2, 6, 5);
     this.place(createHouse({ w: 6, d: 5, h: 2.6 }), t.x - 11, t.z - 12, Math.PI / 2, 6, 5);
     this.place(createChest(), this.chestPos.x, this.chestPos.z, 0, 1.1, 0.7, 0);

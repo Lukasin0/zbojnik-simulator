@@ -5,7 +5,7 @@ import { at, part, stripeTexture } from '@/world/materials';
 import type { AttackAnim } from '@/entities/attacks';
 
 export type HatStyle = 'zbojnik' | 'shako' | 'cap' | 'wig' | 'kerchief' | 'bacov' | 'none';
-export type WeaponStyle = 'valaska' | 'saber' | 'staff' | 'none';
+export type WeaponStyle = 'valaska' | 'saber' | 'staff' | 'lantern' | 'none';
 export type Pose = 'normal' | 'dead' | 'sit' | 'sleep' | 'cheer' | 'downed' | 'wave' | 'laugh' | 'odzemok';
 
 export interface CharacterLook {
@@ -332,7 +332,20 @@ export class CharacterModel {
       holder.add(blade);
     } else if (w === 'staff') {
       holder.add(at(part(new THREE.CylinderGeometry(0.022, 0.026, 1.7, 6), 0x6e4a2a), 0, -0.2, 0));
+    } else if (w === 'lantern') {
+      // the night watchman's lantern hanging from his fist
+      holder.add(at(part(new THREE.BoxGeometry(0.012, 0.08, 0.012), 0x2a2420), 0, -0.04, 0));
+      holder.add(at(part(new THREE.BoxGeometry(0.13, 0.025, 0.13), 0x2a2420), 0, -0.09, 0));
+      holder.add(at(part(new THREE.BoxGeometry(0.1, 0.14, 0.1), 0xffc070, { emissive: 0xffa040, emissiveIntensity: 2.4 }), 0, -0.17, 0));
+      holder.add(at(part(new THREE.BoxGeometry(0.13, 0.025, 0.13), 0x2a2420), 0, -0.25, 0));
     }
+  }
+
+  /** World position of the lantern glass (light follows the swinging arm). */
+  lanternPosition(out: THREE.Vector3): THREE.Vector3 {
+    if (!this.weaponHolder) return this.handPosition(out);
+    this.weaponHolder.updateWorldMatrix(true, false);
+    return this.weaponHolder.localToWorld(out.set(0, -0.17, 0));
   }
 
   private buildHead(): void {

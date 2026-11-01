@@ -192,6 +192,24 @@ export const SEDLIAK: CharacterLook = {
   weapon: 'none',
 };
 
+/** Ponocný – the night watchman who calls out the hours. */
+export const PONOCNY: CharacterLook = {
+  skin: 0xcf9d7c,
+  hair: 0x8a8278,
+  shirt: 0xd8ccb0,
+  pants: 0x4a3a2a,
+  shoes: 0x2a1a12,
+  coat: 0x5a4632,
+  coatLong: true,
+  belt: COLORS.leather,
+  hat: 'zbojnik',
+  hatColor: 0x1d1a17,
+  mustache: true,
+  beard: 0x8a8278,
+  weapon: 'lantern',
+  girth: 1.1,
+};
+
 export const GAZDINA: CharacterLook = {
   ...KATARINA,
   skirt: 0x2a4a6a,

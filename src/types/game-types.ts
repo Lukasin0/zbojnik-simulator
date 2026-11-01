@@ -14,7 +14,8 @@ export type NpcId =
   | 'jan'
   | 'sedliak1'
   | 'sedliak2'
-  | 'gazdina';
+  | 'gazdina'
+  | 'ponocny';
 
 export type QuestStepId =
   | 'c1_talk'

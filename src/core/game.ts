@@ -52,7 +52,9 @@ import {
   BANTER_MUD,
   BANTER_NIGHT,
   BANTER_RAIN,
+  HOUR_NAMES,
   PANDUR_DOWN,
+  PONOCNY_CALL,
   VILLAGER_DANCE,
   VILLAGER_LAUGH,
   VILLAGER_WAVE,
@@ -116,6 +118,10 @@ export class Game {
   private emoteMenu = false;
   private odzemokReadyAt = 0;
   private banterTimer = 35;
+  /** Last full hour the ponocný called out. */
+  private calledHour = -1;
+  /** Ponocný's lantern – always in the scene so the light count never changes (no shader recompiles). */
+  private readonly lantern = new THREE.PointLight(0xffa850, 0, 11, 1.7);
   private readonly trail: WeaponTrail;
   readonly weather: Weather;
   /** Dev tools: freeze the captain in a given attack frame. */
@@ -179,6 +185,7 @@ export class Game {
       new THREE.MeshStandardMaterial({ color: 0xffd34a, emissive: 0xffa020, emissiveIntensity: 1.4, flatShading: true }),
     );
     app.scene.add(this.marker);
+    app.scene.add(this.lantern);
 
     for (const npc of createNpcs(this)) this.npcs.set(npc.id, npc);
     this.interactables = createInteractables(this);
@@ -725,8 +732,9 @@ export class Game {
         },
       });
     }
-    for (const npc of this.npcs.values()) npc.update(dt, this.world, this.player.position);
+    for (const npc of this.npcs.values()) npc.update(dt, this.world, this.player.position, this.dayNight.time);
     this.separateActors();
+    this.updatePonocny();
 
     this.dayNight.update(dt);
     this.weather.update(dt, this.rng);
@@ -973,6 +981,16 @@ export class Game {
     });
   }
 
+  /** The night watchman calls out every full hour when the captain is within earshot. */
+  private updatePonocny(): void {
+    const hour = Math.floor(this.dayNight.time);
+    if (hour === this.calledHour) return;
+    this.calledHour = hour;
+    const npc = this.npcs.get('ponocny');
+    if (!npc || npc.asleep || !npc.model.root.visible || npc.position.distanceTo(this.player.position) > 45) return;
+    this.bark(npc.model.root, line(PONOCNY_CALL, this.rng).replace('{h}', HOUR_NAMES[hour % 12]), 5);
+  }
+
   /** Companions chat on the road – what they say depends on weather, time and the captain. */
   private updateBanter(dt: number): void {
     this.banterTimer -= dt;
@@ -1043,6 +1061,13 @@ export class Game {
     for (const c of this.companions) c.render(alpha, frameDt);
     for (const n of this.npcs.values()) n.render(alpha, frameDt);
     this.ambush.render(alpha, frameDt, this.time);
+    const watchman = this.npcs.get('ponocny');
+    if (watchman?.model.root.visible) {
+      watchman.model.lanternPosition(this.lantern.position);
+      this.lantern.intensity = 2 + this.dayNight.night * 7;
+    } else {
+      this.lantern.intensity = 0;
+    }
 
     if (this.debugPose) {
       const dp = this.debugPose;

@@ -11,6 +11,7 @@ interface DebugCommands {
   skip(): string;
   coach(): string;
   tp(place: keyof typeof LOC): string;
+  at(x: number, z: number): string;
   heal(): string;
   look(yaw: number, pitch?: number): string;
   time(hours: number, speed?: number): string;
@@ -19,6 +20,7 @@ interface DebugCommands {
   face(yaw: number): string;
   state(): unknown;
   pools(): unknown;
+  npcs(): unknown;
 }
 
 declare global {
@@ -84,6 +86,10 @@ export function installDebugTools(game: Game, loop: GameLoop): void {
       game.player.teleport(l.x + 3, l.z + 3, game.world);
       return `teleport → ${place}`;
     },
+    at(x, z) {
+      game.player.teleport(x, z, game.world);
+      return `teleport → ${x} ${z}`;
+    },
     heal() {
       game.player.heal(999);
       return 'zdravie plné';
@@ -116,6 +122,15 @@ export function installDebugTools(game: Game, loop: GameLoop): void {
     },
     pools() {
       return { particles: game.particles.stats };
+    },
+    npcs() {
+      return [...game.npcs.values()].map((n) => ({
+        id: n.id,
+        visible: n.model.root.visible,
+        asleep: n.asleep,
+        x: Math.round(n.position.x),
+        z: Math.round(n.position.z),
+      }));
     },
   };
   console.info('%cZbojník debug: F3 = overlay, window.zbojnik.{god, money, skip, coach, tp, heal, look, time, weather, state, pools}', 'color:#d9b24a');
