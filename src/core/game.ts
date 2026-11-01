@@ -17,7 +17,7 @@ import type { CharacterLook } from '@/components/character-model';
 import type { Actor } from '@/entities/actor';
 import { Companion } from '@/entities/companion';
 import type { Pandur } from '@/entities/enemy';
-import { GAJDOSIK, ILCIK, UHORCIK } from '@/entities/looks';
+import { DISGUISE, GAJDOSIK, ILCIK, UHORCIK } from '@/entities/looks';
 import type { Npc } from '@/entities/npc';
 import { Player, type PlayerHooks } from '@/entities/player';
 import { DEFAULT_SONG, FujaraGame } from '@/minigames/fujara';
@@ -38,7 +38,8 @@ import type { CompanionId, ItemId, NpcId, SaveData } from '@/types/game-types';
 import { DialogBox, type DialogNode } from '@/ui/dialog';
 import { Hud, type MapMarker } from '@/ui/hud';
 import { EventEmitter } from '@/utils/event-emitter';
-import { mulberry32, pick } from '@/utils/math-utils';
+import { angleDiff, mulberry32, pick } from '@/utils/math-utils';
+import { TOWN_RADIUS, TownSystem } from '@/systems/town-system';
 import { Scheduler } from '@/utils/timer';
 import { World } from '@/world/world';
 import { DayNight } from '@/world/day-night';
@@ -53,8 +54,10 @@ import {
   BANTER_NIGHT,
   BANTER_RAIN,
   HOUR_NAMES,
+  KRAMAR_GRUMBLE,
   PANDUR_DOWN,
   PONOCNY_CALL,
+  VYBERCA_TAX,
   VILLAGER_DANCE,
   VILLAGER_LAUGH,
   VILLAGER_WAVE,
@@ -85,6 +88,9 @@ const NOBLES = [
   'slúžny Hrabivý',
 ];
 
+/** Which vendor grumbles after the výberca's stop i on his round (null = empty stall). */
+const VENDOR_AT_STOP: (NpcId | null)[] = ['kramar1', 'kramar2', 'kramar3', null, 'kramar4', null];
+
 const tmpV = new THREE.Vector3();
 const tmpDir = new THREE.Vector3();
 const tmpA = new THREE.Vector3();
@@ -98,6 +104,7 @@ export class Game {
   readonly cameraCtl: CameraController;
   readonly combat = new CombatSystem();
   readonly ambush: AmbushSystem;
+  readonly town: TownSystem;
   readonly player: Player;
   readonly companions: Companion[] = [];
   readonly npcs = new Map<NpcId, Npc>();
@@ -163,12 +170,15 @@ export class Game {
     this.cameraCtl = new CameraController(app.camera, (x, z) => this.world.groundHeight(x, z));
     this.cameraCtl.occluders = this.world.occluders;
     this.ambush = new AmbushSystem(app.scene, this.world);
+    this.town = new TownSystem(app.scene, this.world);
+    this.combat.addSource(() => this.ambush.escorts);
+    this.combat.addSource(() => this.town.guards);
     this.player = new Player(app.scene);
     this.player.onHurt = (_p, amount) => this.onPlayerHurt(amount);
     this.player.teleport(LOC.vatra.x + 5, LOC.vatra.z + 6, this.world);
     this.player.facing = Math.atan2(-5, -6);
     this.inputHandler = new PlayerInputHandler(input);
-    this.hud = new Hud(uiRoot, this.world.terrain.renderMinimap(256));
+    this.hud = new Hud(uiRoot, this.world.terrain.renderMinimap(420));
     this.dialogBox = new DialogBox(uiRoot);
     this.quests = new QuestSystem(
       () => this.data.questStep,
@@ -189,6 +199,9 @@ export class Game {
 
     for (const npc of createNpcs(this)) this.npcs.set(npc.id, npc);
     this.interactables = createInteractables(this);
+    const collector = this.npcs.get('vyberca') ?? null;
+    this.town.collector = collector;
+    if (collector) collector.onRouteStop = (npc, stop) => this.onCollectorStop(npc, stop);
     this.wireWorldProps();
     this.combat.register(this.player);
 
@@ -300,6 +313,8 @@ export class Game {
 
     this.refreshNpcVisibility();
     if (this.data.questStep === 'c3_prepad') this.spawnStoryCoach();
+    this.town.reset();
+    this.setDisguise(!!this.data.flags.disguised && !!this.data.flags.hasDisguise, true);
 
     this.cameraCtl.snap(this.player.position, this.player.facing);
     this.playing = true;
@@ -323,6 +338,92 @@ export class Game {
     for (const id of ['uhorcik', 'ilcik', 'gajdosik'] as const) {
       const npc = this.npcs.get(id);
       if (npc) npc.model.setVisible(!this.data.companions.includes(id));
+    }
+  }
+
+  // ------------------------------------------------------------------ disguise, town & sleep
+
+  get disguised(): boolean {
+    return !!this.data.flags.disguised;
+  }
+
+  /** Any fight going on – a coach escort or the Mikuláš guards. */
+  get inCombat(): boolean {
+    return this.ambush.combatActive || this.town.combatActive;
+  }
+
+  setDisguise(on: boolean, silent = false): void {
+    if (on && !this.data.flags.hasDisguise) return;
+    this.data.flags.disguised = on;
+    this.player.model.setDisguise(on, DISGUISE.coat, DISGUISE.cap);
+    if (silent) return;
+    this.sfx('straw', this.player.position);
+    this.toast(on ? 'Handlársky kabát na sebe – teraz si len obyčajný kramár.' : 'Kabát dolu – zas si Jánošík.', 'info');
+    this.requestSave();
+  }
+
+  /** True when the captain stands behind `who` (outside his field of view). */
+  behind(who: Actor): boolean {
+    const dx = this.player.position.x - who.position.x;
+    const dz = this.player.position.z - who.position.z;
+    return Math.abs(angleDiff(who.facing, Math.atan2(dx, dz))) > Math.PI * 0.6;
+  }
+
+  raiseTownAlarm(): void {
+    this.town.raiseAlarm(this.townContext());
+  }
+
+  /** A night in the šenk or the inn: morning, full health and stamina. */
+  sleepUntilMorning(): void {
+    this.dayNight.setTime(6.5);
+    this.player.heal(999);
+    this.player.stamina = PLAYER_TUNING.maxStamina;
+    this.toast('Vyspal si sa do ružova. Je ráno, kohúty kikiríkajú a pandúri ešte spia.', 'good');
+    this.requestSave();
+  }
+
+  /** The výberca taxes a stall; the vendor grumbles once he has moved on. */
+  private onCollectorStop(npc: Npc, stop: number): void {
+    if (npc.position.distanceTo(this.player.position) > 35) return;
+    this.bark(npc.model.root, line(VYBERCA_TAX, this.rng), 3.5);
+    const vendorId = VENDOR_AT_STOP[stop];
+    const vendor = vendorId ? this.npcs.get(vendorId) : null;
+    if (vendor) this.scheduler.after(4.5, () => vendor.model.root.visible && this.bark(vendor.model.root, line(KRAMAR_GRUMBLE, this.rng), 3));
+  }
+
+  private townContext(): Parameters<TownSystem['update']>[1] {
+    return {
+      zbojnici: [this.player, ...this.companions],
+      disguised: this.disguised,
+      violent: this.player.attacking,
+      onStrike: (e, t) => this.enemyStrike(e, t),
+      onPandurDown: (e) => this.onPandurDown(e),
+      onAlarm: () => {
+        if (this.disguised) this.setDisguise(false, true);
+        this.toast('Pandúri ťa spoznali! Bež z mesta, alebo im ukáž valašku!', 'bad');
+        this.events.emit('combat:start', { enemies: this.town.guards.length });
+      },
+      onCalm: () => {
+        this.toast('Pandúri ťa stratili z očí.', 'good');
+        this.events.emit('combat:end', { won: false });
+      },
+      bark: (t, text, s) => this.bark(t, text, s),
+      setSuspicion: (v) => this.hud.setSuspicion(v),
+    };
+  }
+
+  /** Mikuláš quest progress that depends on where the captain is. */
+  private updateTownQuest(): void {
+    const p = this.player.position;
+    const d = Math.hypot(p.x - LOC.mikulas.x, p.z - LOC.mikulas.z);
+    if (this.quests.is('c4_cesta') && d < TOWN_RADIUS) {
+      if (!this.disguised) this.toastOnce('town-warn', 'Bez prestrojenia ťa tu spoznajú! Stlač H a obleč si kabát.', 'bad', 8);
+      this.quests.advance('c4_cesta');
+    } else if (this.quests.is('c4_vreckuj') && d < TOWN_RADIUS) {
+      const h = this.dayNight.time;
+      if (h >= 19 || h < 7) this.toastOnce('fair-closed', 'Jarmok je zatvorený – výberca spí na radnici. Príď ráno, alebo sa vyspi v hostinci.', 'info', 60);
+    } else if (this.quests.is('c4_utek') && d > TOWN_RADIUS + 25) {
+      this.quests.advance('c4_utek');
     }
   }
 
@@ -474,7 +575,7 @@ export class Game {
 
   /** Called when the fujara minigame ends. */
   playFujara(): void {
-    if (this.ambush.combatActive) {
+    if (this.inCombat) {
       this.toast('Teraz nie je čas na muziku!', 'bad');
       return;
     }
@@ -598,6 +699,17 @@ export class Game {
         return npc('katarina');
       case 'c3_ukry':
         return npc('jan');
+      case 'c4_tip':
+        return npc('krcmar');
+      case 'c4_prestroj':
+        return npc('gazdina');
+      case 'c4_cesta':
+        return tmpV.set(LOC.mikulas.x, this.world.groundHeight(LOC.mikulas.x, LOC.mikulas.z), LOC.mikulas.z);
+      case 'c4_vreckuj':
+        return npc('vyberca');
+      case 'c4_utek':
+      case 'c4_rozdel':
+        return npc('hana');
       case 'free':
         return this.ambush.coach?.position ?? null;
     }
@@ -656,6 +768,13 @@ export class Game {
     this.events.emit('player:hurt', { amount });
   }
 
+  private onPandurDown(e: Pandur): void {
+    this.data.stats.pandursBeaten++;
+    this.sfx('death', e.position);
+    if (this.rng() < 0.6) this.bark(e.model.root, line(PANDUR_DOWN, this.rng), 3);
+    this.particles.emit({ x: e.position.x, y: e.position.y + 0.3, z: e.position.z, count: 16, color: [0x6a5a40, 0x8a7a60], speed: 2, up: 1.5 });
+  }
+
   private enemyStrike(e: Pandur, target: Actor): void {
     const dmg = PANDUR_TUNING.damage * (e.drowsy > 0 ? 0.6 : 1);
     target.receiveHit(dmg, e.position, 'enemy');
@@ -692,12 +811,7 @@ export class Game {
       zbojnici,
       logX,
       onStrike: (e, t) => this.enemyStrike(e, t),
-      onPandurDown: (e) => {
-        this.data.stats.pandursBeaten++;
-        this.sfx('death', e.position);
-        if (this.rng() < 0.6) this.bark(e.model.root, line(PANDUR_DOWN, this.rng), 3);
-        this.particles.emit({ x: e.position.x, y: e.position.y + 0.3, z: e.position.z, count: 16, color: [0x6a5a40, 0x8a7a60], speed: 2, up: 1.5 });
-      },
+      onPandurDown: (e) => this.onPandurDown(e),
       onAlert: () => {
         this.toast('Pandúri vás zbadali! Do boja!', 'bad');
         this.events.emit('combat:start', { enemies: this.ambush.escorts.length });
@@ -718,14 +832,23 @@ export class Game {
     });
     if (wasCombat && !this.ambush.combatActive && !this.ambush.defeated) this.events.emit('combat:end', { won: false });
 
-    const enemies = this.ambush.escorts;
+    // a valaška out from under the pedlar's coat gives the game away
+    if (this.disguised && this.player.attacking) {
+      this.setDisguise(false, true);
+      this.toastOnce('disguise-off', 'Valaška spod kabáta – prestrojenie je fuč!', 'bad');
+    }
+    this.town.update(dt, this.townContext());
+    this.updateTownQuest();
+
+    const enemies = [...this.ambush.escorts, ...this.town.guards];
+    const fighting = this.inCombat;
     for (const c of this.companions) {
       c.update(dt, {
         world: this.world,
         leader: this.player,
         leaderYaw: this.player.facing,
         enemies,
-        combat: this.ambush.combatActive,
+        combat: fighting,
         onStrike: (comp, target) => {
           target.receiveHit(COMPANION_TUNING.damage * (this.time < this.haluskyUntil ? 1.3 : 1), comp.position, 'companion');
           this.sfx('hit', target.position, 1.1);
@@ -752,7 +875,7 @@ export class Game {
     this.autosaveTimer += dt;
     if (this.autosaveTimer > 45) {
       this.autosaveTimer = 0;
-      if (!this.ambush.combatActive && this.player.isAlive()) this.requestSave();
+      if (!this.inCombat && this.player.isAlive()) this.requestSave();
     }
   }
 
@@ -816,6 +939,7 @@ export class Game {
   private separateActors(): void {
     const list: Actor[] = [this.player, ...this.companions.filter((c) => c.isAlive())];
     for (const e of this.ambush.escorts) if (e.isAlive() && e.state !== 'sleepy') list.push(e);
+    for (const e of this.town.guards) if (e.isAlive()) list.push(e);
     for (const n of this.npcs.values()) if (n.basePose === 'normal' && n.model.root.visible) list.push(n);
     for (let i = 0; i < list.length; i++) {
       const a = list[i].position;
@@ -897,6 +1021,11 @@ export class Game {
     }
     if (this.input.justPressed('fujara')) this.playFujara();
     if (this.input.justPressed('map')) this.hud.toggleBigMap();
+    if (this.input.justPressed('disguise')) {
+      if (!this.data.flags.hasDisguise) this.toastOnce('no-disguise', 'Nemáš prestrojenie – gazdiná Mara v dedine šije handlárske kabáty.', 'info');
+      else if (this.inCombat) this.toast('Teraz sa neprezliekaj – bij sa!', 'bad');
+      else this.setDisguise(!this.disguised);
+    }
   }
 
   setEmoteMenu(open: boolean): void {
@@ -909,7 +1038,7 @@ export class Game {
   playEmote(id: EmoteId): void {
     const p = this.player;
     if (!p.isAlive() || p.attacking) return;
-    if (this.ambush.combatActive && id !== 'hej') {
+    if (this.inCombat && id !== 'hej') {
       this.toast('Teraz nie je čas na parádu – bij pandúrov!', 'bad');
       return;
     }
@@ -996,7 +1125,7 @@ export class Game {
     this.banterTimer -= dt;
     if (this.banterTimer > 0) return;
     this.banterTimer = 45 + this.rng() * 45;
-    if (this.ambush.combatActive || !this.player.isAlive()) return;
+    if (this.inCombat || !this.player.isAlive()) return;
     const near = this.companions.filter((c) => c.isAlive() && c.position.distanceTo(this.player.position) < 15);
     if (near.length === 0) return;
     const c = near[Math.floor(this.rng() * near.length)];
@@ -1061,6 +1190,7 @@ export class Game {
     for (const c of this.companions) c.render(alpha, frameDt);
     for (const n of this.npcs.values()) n.render(alpha, frameDt);
     this.ambush.render(alpha, frameDt, this.time);
+    this.town.render(alpha, frameDt);
     const watchman = this.npcs.get('ponocny');
     if (watchman?.model.root.visible) {
       watchman.model.lanternPosition(this.lantern.position);
@@ -1126,7 +1256,7 @@ export class Game {
       reputation: d.reputation,
       inventory: d.inventory,
       party: this.companions.map((c) => ({ name: c.displayName, hp: c.hp, maxHp: c.maxHp, downed: c.downed })),
-      chapter: this.quests.chapter <= 3 ? `Kapitola ${this.quests.chapter}: ${CHAPTER_TITLES[this.quests.chapter]}` : 'Voľná hra',
+      chapter: this.quests.chapter <= 4 ? `Kapitola ${this.quests.chapter}: ${CHAPTER_TITLES[this.quests.chapter]}` : 'Voľná hra',
       objective: this.quests.objectiveText(),
       hint: this.quests.def.hint ?? '',
       crosshair: this.input.pointerLocked && this.scenes.top?.name === 'play',
@@ -1149,7 +1279,10 @@ export class Game {
       { x: LOC.terchova.x, z: LOC.terchova.z, color: '#6a9ad8', label: 'Terchová – brat Ján' },
       { x: LOC.castle.x, z: LOC.castle.z, color: '#8f8a80', label: 'Hrad', size: 4 },
       { x: LOC.field.x, z: LOC.field.z, color: '#c9a36a', label: 'Zemiaky', size: 4 },
+      { x: LOC.mikulas.x, z: LOC.mikulas.z, color: '#e8dcc0', label: 'Liptovský Mikuláš', size: 6 },
+      { x: LOC.hana.x, z: LOC.hana.z, color: '#7fb069', label: 'Vdova Hana', size: 4 },
     ];
+    for (const g of this.town.guards) if (g.alerted && g.isAlive()) markers.push({ x: g.position.x, z: g.position.z, color: '#2c3e66', size: 3 });
     for (const c of this.companions) markers.push({ x: c.position.x, z: c.position.z, color: '#ece3d0', size: 3 });
     if (this.ambush.coach) markers.push({ x: this.ambush.coach.position.x, z: this.ambush.coach.position.z, color: '#d8432f', label: 'Panský koč', size: 6 });
     return markers;

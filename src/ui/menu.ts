@@ -58,6 +58,7 @@ export function createControlsPanel(onClose: () => void): HTMLDivElement {
       <kbd>Ľavé tl. / J</kbd><span>sek valaškou – klikaj v rytme pre 3-úderové kombo</span>
       <kbd>Stredné tl. / Q</kbd><span>valaškový vír – silný úder dookola (veľa sily)</span>
       <kbd>B</kbd><span>emócie: mávanie, odzemok, Hej-hou!, smiech, sadnúť si</span>
+      <kbd>H</kbd><span>handlárske prestrojenie (od kapitoly 4)</span>
       <kbd>Pravé tl. / F</kbd><span>drž = mierenie cez rameno, pusti = výstrel z kresadlovky</span>
       <kbd>E</kbd><span>hovoriť / použiť</span>
       <kbd>G</kbd><span>zahrať na fujare (ráž, uspávanie pandúrov)</span>

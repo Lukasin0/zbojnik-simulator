@@ -1,7 +1,27 @@
 import * as THREE from 'three';
 import { ECONOMY, ITEMS, LOC } from '@/config/constants';
 import type { Game } from '@/core/game';
-import { BACA, FERO, GAJDOSIK, GAZDINA, ILCIK, JAN, KATARINA, KOVAC, KRCMAR, PONOCNY, SEDLIAK, UHORCIK } from '@/entities/looks';
+import {
+  BACA,
+  FERO,
+  GAJDOSIK,
+  GAZDINA,
+  HANA,
+  HOSTINSKY,
+  ILCIK,
+  JAN,
+  KATARINA,
+  KOVAC,
+  KRAMAR,
+  KRAMARKA,
+  KRCMAR,
+  MESTAN,
+  PONOCNY,
+  SEDLIAK,
+  UHORCIK,
+  VYBERCA,
+} from '@/entities/looks';
+import { PickpocketGame } from '@/minigames/pickpocket';
 import { Npc } from '@/entities/npc';
 import { HaluskyGame } from '@/minigames/halusky';
 import { PakaGame } from '@/minigames/paka';
@@ -10,8 +30,12 @@ import type { DialogNode, DialogOption } from '@/ui/dialog';
 import {
   BACA_WISDOM,
   KOVAC_JOKES,
+  HANA_THANKS,
+  KRAMAR_TALK,
   KRCMAR_GOSSIP,
+  MESTAN_TALK,
   PONOCNY_TALK,
+  POSTER_TEXT,
   VILLAGER_HIGH,
   VILLAGER_LOW,
   VILLAGER_MID,
@@ -55,6 +79,37 @@ export function createNpcs(game: Game): Npc[] {
     new Npc('sedliak2', 'Sedliak Paľo', SEDLIAK, s, 38, 30, 1, w, 'normal', 6).sleepsAt(doors.palo, 20.5, 5.5),
     new Npc('gazdina', 'Gazdiná Mara', GAZDINA, s, 22, 12, 2, w, 'normal', 5).sleepsAt(doors.mara, 20, 5),
     new Npc('ponocny', 'Ponocný Ignác', PONOCNY, s, 32, 22, 0, w, 'normal', 18).sleepsAt(doors.ponocny, 5.5, 20.5),
+    ...createTownNpcs(game),
+  ];
+}
+
+/** Liptovský Mikuláš: market vendors (fair 7–19), townsfolk, the innkeeper, the výberca and widow Hana. */
+function createTownNpcs(game: Game): Npc[] {
+  const s = game.app.scene;
+  const w = game.world;
+  const m = LOC.mikulas;
+  const st = w.stalls;
+  const doors = w.doors;
+  // the výberca's round: in front of every stall, row A (south-facing) then back along row B
+  const round = [
+    w.ground(m.x - 22, m.z - 5.8),
+    w.ground(m.x - 12, m.z - 5.8),
+    w.ground(m.x + 12, m.z - 5.8),
+    w.ground(m.x + 22, m.z - 5.8),
+    w.ground(m.x + 17, m.z + 5.8),
+    w.ground(m.x - 17, m.z + 5.8),
+  ];
+  const hana = doors.hana;
+  return [
+    new Npc('kramar1', 'Hrnčiar Imro', KRAMAR, s, st[0].x, st[0].z, 0, w).sleepsAt(doors.mestoW0, 19, 7),
+    new Npc('kramar2', 'Kapustárka Anča', KRAMARKA, s, st[1].x, st[1].z, 0, w).sleepsAt(doors.mestoW1, 19, 7),
+    new Npc('kramar3', 'Medovnikárka Bora', KRAMARKA, s, st[2].x, st[2].z, 0, w).sleepsAt(doors.mestoE0, 19, 7),
+    new Npc('kramar4', 'Čižmár Lojzo', KRAMAR, s, st[5].x, st[5].z, Math.PI, w).sleepsAt(doors.mestoE1, 19, 7),
+    new Npc('mestan1', 'Mešťan Ferdinand', MESTAN, s, m.x - 8, m.z + 3, 0, w, 'normal', 14).sleepsAt(doors.mestoW2, 21, 6),
+    new Npc('mestan2', 'Mešťanka Rozália', KRAMARKA, s, m.x + 8, m.z - 3, 1, w, 'normal', 12).sleepsAt(doors.hostinec, 20.5, 6.5),
+    new Npc('hostinsky', 'Hostinský Kubo', HOSTINSKY, s, doors.hostinec.x - 0.8, doors.hostinec.z + 2, -Math.PI / 2, w),
+    new Npc('vyberca', 'Výberca Gašpar Mastný', VYBERCA, s, round[0].x, round[0].z, 0, w).sleepsAt(doors.vyberca, 18.5, 7.5).walksRoute(round),
+    new Npc('hana', 'Vdova Hana', HANA, s, hana.x, hana.z + 0.6, 0, w).sleepsAt(hana, 20.5, 6),
   ];
 }
 
@@ -194,17 +249,135 @@ function recruitDialog(game: Game, id: CompanionId, strength: number, intro: str
 
 function krcmarDialog(game: Game): DialogNode {
   const discount = game.data.reputation >= 40 ? 1 : 0;
+  const t = (text: string, options?: DialogOption[]): DialogNode => talk(game, 'krcmar', text, options);
+  if (game.quests.is('c4_tip')) {
+    return t(
+      'Kapitán! Dobre, že ideš. V Mikuláši je jarmok a chodí po ňom výberca daní Gašpar Mastný. Berie kramárom aj posledný groš – vraj už zdanil aj kapustu, čo ešte len vyrastie.\n\nMešec nosí na opasku, plný ako moja bečka po Vianociach. Ale pozor: v meste visia plagáty s tvojou tvárou. V zbojníckom klobúku ťa pandúri spoznajú skôr, ako povieš „dobrý deň“.\n\nGazdiná Mara šije handlárske kabáty. V takom by ťa nespoznala ani vlastná mama.',
+      [{ label: 'Mastný, hovoríš? Tak ho trochu odľahčíme.', action: () => game.quests.advance('c4_tip') }],
+    );
+  }
   const node = (): DialogNode =>
-    talk(game, 'krcmar', 'Čo si dáš, kapitán? Slanina je dnes ešte teplá a borovička studená. Ako má byť.', [
+    t('Čo si dáš, kapitán? Slanina je dnes ešte teplá a borovička studená. Ako má byť.', [
       buyOption(game, 'slanina', ITEMS.slanina.price - discount, node),
       buyOption(game, 'borovicka', ITEMS.borovicka.price - discount, node),
       {
         label: 'Čo nové v dedine?',
-        action: () => talk(game, 'krcmar', line(KRCMAR_GOSSIP, game.rng), [{ label: 'Hehe. Ešte niečo?', action: node }, bye]),
+        action: () => t(line(KRCMAR_GOSSIP, game.rng), [{ label: 'Hehe. Ešte niečo?', action: node }, bye]),
       },
+      innOption(game, 'krcmar'),
       bye,
     ]);
   return node();
+}
+
+/** Sleep until morning in the šenk or the Mikuláš inn. */
+function innOption(game: Game, id: NpcId): DialogOption {
+  const night = game.dayNight.time >= 18 || game.dayNight.time < 5;
+  return {
+    label: `Prespať sa do rána (${ECONOMY.innPrice} dukáty)`,
+    disabled: !night || game.data.dukaty < ECONOMY.innPrice,
+    action: () => {
+      if (!game.spend(ECONOMY.innPrice)) return;
+      game.sleepUntilMorning();
+      return talk(game, id, 'Dobré ráno, kapitán! Chrápal si tak, že sa pandúri v Ružomberku budili.');
+    },
+  };
+}
+
+// --------------------------------------------------------------------------- Liptovský Mikuláš
+
+function hostinskyDialog(game: Game): DialogNode {
+  const node = (): DialogNode =>
+    talk(game, 'hostinsky', 'Vitajte U Zlatej husi! Husi už nemáme, výberca ich zdanil. Ale slanina a posteľ sa nájdu.', [
+      buyOption(game, 'slanina', ITEMS.slanina.price + 1, node),
+      buyOption(game, 'parenica', ITEMS.parenica.price + 1, node),
+      innOption(game, 'hostinsky'),
+      bye,
+    ]);
+  return node();
+}
+
+function maraDialog(game: Game): DialogNode {
+  const t = (text: string, options?: DialogOption[]): DialogNode => talk(game, 'gazdina', text, options);
+  const price = ECONOMY.disguisePrice;
+  return t(
+    'Handlársky kabát? Pre teba, Juraj? Hehe, ušijem ti taký, že ťa nespozná ani vlastný kôň. Čapica, kabát po kolená a krošňa na chrbát – budeš vyzerať ako ten, čo predáva hrebene a kupuje klebety.',
+    [
+      {
+        label: `Ušite mi ho, gazdiná (${price} dukátov)`,
+        disabled: game.data.dukaty < price,
+        action: () => {
+          if (!game.spend(price)) return;
+          game.data.flags.hasDisguise = true;
+          game.toast('Máš handlársky kabát! Klávesom H ho oblečieš a vyzlečieš.', 'quest');
+          game.quests.advance('c4_prestroj');
+          return t('Tu máš. A valašku pod kabátom nevyťahuj – handlári sa bijú len o cenu.');
+        },
+      },
+      { label: 'Ešte si to rozmyslím.' },
+    ],
+  );
+}
+
+function hanaDialog(game: Game): DialogNode {
+  const t = (text: string, options?: DialogOption[]): DialogNode => talk(game, 'hana', text, options);
+  const share = ECONOMY.hanaShare;
+  if (game.quests.is('c4_rozdel')) {
+    return t(
+      'Kto je tam? …Ach, cudzí človek. Ja nič nemám, synku – Mastný mi vzal aj posledné vajce. Aj s kurou. Lebo vraj „kura je majetok, z ktorého vajce plynie“.',
+      [
+        {
+          label: `Tu máte, mamko – ${share} dukátov. Rozdajte ich kramárom, čo ich Mastný ožobráčil.`,
+          disabled: game.data.dukaty < share,
+          action: () => {
+            game.data.dukaty -= share;
+            game.data.stats.givenToPoor += share;
+            game.data.reputation += 8;
+            game.sfx('coin', undefined, 0.9);
+            game.quests.advance('c4_rozdel');
+            return t(line(HANA_THANKS, game.rng));
+          },
+        },
+        { label: 'Hneď sa vrátim.' },
+      ],
+    );
+  }
+  if (game.quests.reached('free')) return t('Kramári sa ti klaňajú až po zem, aj keď nevedia komu. Ja to viem. A mlčím.');
+  return t('Mastný chodí po jarmoku ako hus po dvore. Len hus aspoň znesie vajce.');
+}
+
+/** Pickpocketing the výberca – only from behind, only in disguise. */
+function collectorInteractable(game: Game): Interactable {
+  return {
+    id: 'vyberca-mesec',
+    radius: 2.1,
+    position: () => game.npcs.get('vyberca')?.position ?? new THREE.Vector3(0, -999, 0),
+    label: () => {
+      const npc = game.npcs.get('vyberca');
+      if (!npc || !npc.model.root.visible || !game.quests.is('c4_vreckuj') || game.town.alarm) return null;
+      if (!game.disguised) return 'Výberca – bez prestrojenia sa k nemu nedostaneš';
+      return game.behind(npc) ? 'Ukradnúť výbercovi mešec' : 'Výberca ťa vidí – obíď ho zozadu';
+    },
+    act: () => {
+      const npc = game.npcs.get('vyberca');
+      if (!npc || !game.disguised || !game.behind(npc)) {
+        game.toast('Zozadu, kapitán! Spredu by si mu musel najprv povedať „dobrý deň“.', 'info');
+        return;
+      }
+      game.startMinigame(new PickpocketGame(game.audio), (r) => {
+        if (r.won) {
+          const got = game.addDukaty(ECONOMY.collectorPurse);
+          game.data.flags.c4Stolen = true;
+          game.town.theftTimer = 25;
+          game.toast(`+${got} dukátov z mešca výbercu! Teraz rýchlo preč z mesta.`, 'good');
+          game.quests.advance('c4_vreckuj');
+        } else if (!r.aborted) {
+          game.bark(npc.model.root, 'Zlodej! Ruky preč od daní!', 3);
+          game.raiseTownAlarm();
+        }
+      });
+    },
+  };
 }
 
 function feroDialog(game: Game): DialogNode {
@@ -543,7 +716,7 @@ export function createInteractables(game: Game): Interactable[] {
     npcAt(game, 'kovac', 3, () => 'Kováč Mišo – výbava', () => game.openDialog(kovacDialog(game))),
     npcAt(game, 'katarina', 2.8, () => 'Stará Katarína – rozdeliť korisť', () => game.openDialog(katarinaDialog(game))),
     npcAt(game, 'jan', 2.8, () => 'Brat Ján – truhlica s lupom', () => game.openDialog(janDialog(game))),
-    ...(['sedliak1', 'sedliak2', 'gazdina'] as const).map((id) =>
+    ...(['sedliak1', 'sedliak2'] as const).map((id) =>
       npcAt(
         game,
         id,
@@ -555,6 +728,44 @@ export function createInteractables(game: Game): Interactable[] {
         },
       ),
     ),
+    npcAt(
+      game,
+      'gazdina',
+      2.4,
+      () => (game.quests.reached('c4_prestroj') && !game.data.flags.hasDisguise ? 'Gazdiná Mara – handlársky kabát' : 'Gazdiná Mara – prihovoriť sa'),
+      () => {
+        if (game.quests.reached('c4_prestroj') && !game.data.flags.hasDisguise) {
+          game.openDialog(maraDialog(game));
+          return;
+        }
+        const npc = game.npcs.get('gazdina');
+        if (npc) game.bark(npc.model.root, villagerLine(game), 3.5);
+      },
+    ),
+    // Liptovský Mikuláš
+    ...(['kramar1', 'kramar2', 'kramar3', 'kramar4'] as const).map((id) =>
+      npcAt(game, id, 2.6, () => `${game.npcs.get(id)?.displayName ?? ''} – prihovoriť sa`, () => {
+        const npc = game.npcs.get(id);
+        if (npc) game.bark(npc.model.root, line(KRAMAR_TALK, game.rng), 4.5);
+      }),
+    ),
+    ...(['mestan1', 'mestan2'] as const).map((id) =>
+      npcAt(game, id, 2.4, () => `${game.npcs.get(id)?.displayName ?? ''} – prihovoriť sa`, () => {
+        const npc = game.npcs.get(id);
+        if (npc) game.bark(npc.model.root, line(MESTAN_TALK, game.rng), 4.5);
+      }),
+    ),
+    npcAt(game, 'hostinsky', 2.8, () => 'Hostinský Kubo – jedlo a nocľah', () => game.openDialog(hostinskyDialog(game))),
+    npcAt(game, 'hana', 2.6, () => 'Vdova Hana – hovoriť', () => game.openDialog(hanaDialog(game))),
+    collectorInteractable(game),
+    {
+      id: 'plagat',
+      radius: 2.4,
+      position: () => game.world.posterPos,
+      label: () => 'Plagát na radnici – prečítať',
+      act: () => game.openDialog({ speaker: 'Plagát na radnici', text: POSTER_TEXT }),
+    },
+    ...(['kramar1', 'kramar2', 'kramar3', 'kramar4', 'mestan1', 'mestan2', 'vyberca', 'hana'] as const).map((id) => knockAt(game, id)),
     npcAt(game, 'ponocny', 2.6, () => 'Ponocný Ignác – prihovoriť sa', () => {
       const npc = game.npcs.get('ponocny');
       if (npc) game.bark(npc.model.root, line(PONOCNY_TALK, game.rng), 4.5);

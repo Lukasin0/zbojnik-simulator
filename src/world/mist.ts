@@ -74,7 +74,7 @@ export class Mist {
     const tex = tileableNoiseTexture(128, 4);
     const above = (x: number, z: number, offsets: number[]): number[] => offsets.map((o) => groundAt(x, z) + o);
     const areas: { x: number; z: number; w: number; d: number; heights: number[] }[] = [
-      { x: 0, z: 126, w: 460, d: 100, heights: [WATER_LEVEL + 1.1, WATER_LEVEL + 2.4, WATER_LEVEL + 3.8] },
+      { x: 110, z: 122, w: 760, d: 100, heights: [WATER_LEVEL + 1.1, WATER_LEVEL + 2.4, WATER_LEVEL + 3.8] },
       { x: LOC.village.x, z: LOC.village.z, w: 190, d: 190, heights: above(LOC.village.x, LOC.village.z, [0.7, 2.0]) },
       { x: LOC.salas.x, z: LOC.salas.z, w: 90, d: 90, heights: above(LOC.salas.x, LOC.salas.z, [0.8, 2.2]) },
     ];

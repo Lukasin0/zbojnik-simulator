@@ -13,7 +13,8 @@ export const CHAPTER_TITLES: Record<number, string> = {
   1: 'Prísaha na Rovnej hore',
   2: 'Felláci z Liptova',
   3: 'Prepad panského koča na Váhu',
-  4: 'Kapitán Liptova',
+  4: 'Jarmok v Mikuláši',
+  5: 'Kapitán Liptova',
 };
 
 export const QUEST_STEPS: QuestStepDef[] = [
@@ -63,9 +64,35 @@ export const QUEST_STEPS: QuestStepDef[] = [
   { id: 'c3_lup', chapter: 3, text: 'Vyžmýkaj zemana v koči o dukáty.' },
   { id: 'c3_rozdel', chapter: 3, text: 'Rozdeľ korisť chudobe – prihovor sa starej Kataríne v dedine.' },
   { id: 'c3_ukry', chapter: 3, text: 'Ukry zvyšok lupu u brata Jána v Terchovej.' },
+  { id: 'c4_tip', chapter: 4, text: 'Šenkár Ďurko vraj počul novinky z Mikuláša. Zastav sa v šenku.' },
+  {
+    id: 'c4_prestroj',
+    chapter: 4,
+    text: 'Zožeň si prestrojenie – gazdiná Mara šije kabáty pre handlárov.',
+    hint: 'Mara chodí po dedine pri studni. V noci spí – zaklop jej na dvere.',
+  },
+  {
+    id: 'c4_cesta',
+    chapter: 4,
+    text: 'Choď na jarmok do Liptovského Mikuláša – na východ po hradskej.',
+    hint: 'Klávesom H si oblečieš alebo vyzlečieš prestrojenie. Bez neho ťa pandúri v meste spoznajú.',
+  },
+  {
+    id: 'c4_vreckuj',
+    chapter: 4,
+    text: 'Nájdi na jarmoku výbercu daní a ukradni mu mešec – zozadu, potichu.',
+    hint: 'Jarmok je otvorený cez deň (7:00 – 19:00). Priblíž sa k výbercovi zozadu a stlač E.',
+  },
+  {
+    id: 'c4_utek',
+    chapter: 4,
+    text: 'Zmizni z mesta, kým si výberca všimne, že mešec je preč!',
+    hint: 'Choď von z Mikuláša – ďalej ako za vdovinu chalupu pri hradskej.',
+  },
+  { id: 'c4_rozdel', chapter: 4, text: 'Vráť okradnutým kramárom ich groše – daj podiel vdove Hane pod mestom.' },
   {
     id: 'free',
-    chapter: 4,
+    chapter: 5,
     text: 'Voľná hra: pýtaj si u bača typy na pánov, prepadávaj koče, pomáhaj chudobe.',
   },
 ];

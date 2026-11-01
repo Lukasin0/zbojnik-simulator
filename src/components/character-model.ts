@@ -52,6 +52,7 @@ export interface AnimParams {
 }
 
 const LEG_TOP = 0.92;
+const WOOD_STRAP = 0x3a2418;
 
 interface AttackPose {
   armX: number;
@@ -170,6 +171,10 @@ export class CharacterModel {
   private poseTime = 0;
   private currentPose: Pose = 'normal';
   private weaponHolder: THREE.Group | null = null;
+  private hatGroup: THREE.Group | null = null;
+  private braidMesh: THREE.Mesh | null = null;
+  private pistolGroup: THREE.Group | null = null;
+  private disguiseParts: THREE.Object3D[] | null = null;
   private stride = 0;
   private air = 0;
 
@@ -268,7 +273,35 @@ export class CharacterModel {
       pistol.position.set(-0.1, 0.2, 0.23 * g);
       pistol.rotation.set(-0.9, 0.3, 0);
       this.torso.add(pistol);
+      this.pistolGroup = pistol;
     }
+  }
+
+  /**
+   * Handlár disguise: long plain coat, cap and a pedlar's pack instead of the
+   * famous hat, braids, pistol and valaška.
+   */
+  setDisguise(on: boolean, coat: number, cap: number): void {
+    if (on && !this.disguiseParts) {
+      const g = this.look.girth ?? 1;
+      const longCoat = part(new THREE.CylinderGeometry(0.225, 0.29, 1.0, 8), coat);
+      longCoat.position.y = 0.08;
+      longCoat.scale.set(g, 1, g * 0.9);
+      const hood = part(new THREE.SphereGeometry(0.145, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), cap);
+      hood.position.y = 0.08;
+      const pack = new THREE.Group();
+      pack.add(at(part(new THREE.BoxGeometry(0.42, 0.5, 0.22), 0x7a5a38), 0, 0, 0));
+      pack.add(at(part(new THREE.BoxGeometry(0.46, 0.06, 0.26), WOOD_STRAP), 0, 0.12, 0));
+      pack.position.set(0, 0.35, -0.3 * g);
+      this.torso.add(longCoat, pack);
+      this.head.add(hood);
+      this.disguiseParts = [longCoat, hood, pack];
+    }
+    this.disguiseParts?.forEach((p) => (p.visible = on));
+    if (this.hatGroup) this.hatGroup.visible = !on;
+    if (this.braidMesh) this.braidMesh.visible = !on;
+    if (this.pistolGroup) this.pistolGroup.visible = !on;
+    if (this.weaponHolder) this.weaponHolder.visible = !on;
   }
 
   /** The famous wide leather belt – wider with each upgrade. */
@@ -374,7 +407,8 @@ export class CharacterModel {
           beads.push(b);
         }
       }
-      this.head.add(part(merged(beads), L.hair));
+      this.braidMesh = part(merged(beads), L.hair);
+      this.head.add(this.braidMesh);
     }
     if (L.mustache) {
       const m = part(new THREE.BoxGeometry(0.1, 0.022, 0.03), L.hair);
@@ -395,6 +429,7 @@ export class CharacterModel {
     const hat = new THREE.Group();
     hat.position.y = 0.1;
     this.head.add(hat);
+    this.hatGroup = hat;
     switch (L.hat) {
       case 'zbojnik': {
         hat.add(at(part(new THREE.CylinderGeometry(0.27, 0.28, 0.025, 12), color), 0, 0.02, 0));

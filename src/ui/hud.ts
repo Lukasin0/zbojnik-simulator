@@ -73,6 +73,7 @@ export class Hud {
   private readonly minimap: HTMLCanvasElement;
   private readonly mapCtx: CanvasRenderingContext2D | null;
   private readonly clock: HTMLDivElement;
+  private readonly suspicion: HTMLDivElement;
   private readonly emotes: HTMLDivElement;
   private readonly hotbar: HTMLDivElement;
   private readonly ingredients: HTMLDivElement;
@@ -115,7 +116,9 @@ export class Hud {
     this.minimap.height = 340;
     this.mapCtx = this.minimap.getContext('2d');
     this.clock = el('div', 'clock');
-    tr.append(this.objective, this.minimap, this.clock);
+    this.suspicion = el('div', 'suspicion');
+    this.suspicion.innerHTML = '<span>Podozrenie</span><i></i>';
+    tr.append(this.objective, this.minimap, this.clock, this.suspicion);
 
     this.hotbar = el('div', 'hotbar');
     this.ingredients = el('div', 'ingredients');
@@ -231,6 +234,15 @@ export class Hud {
   }
 
   /** null hides the emote menu. */
+  /** Town guards' suspicion meter (null hides it). */
+  setSuspicion(v: number | null): void {
+    const key = v === null ? 'off' : (Math.round(v * 20) / 20).toFixed(2);
+    if (!this.changed('suspicion', key)) return;
+    this.suspicion.classList.toggle('show', v !== null);
+    const bar = this.suspicion.querySelector('i');
+    if (bar && v !== null) bar.style.width = `${Math.round(Math.min(1, v) * 100)}%`;
+  }
+
   showEmotes(names: string[] | null): void {
     if (!names) {
       this.emotes.classList.remove('show');
@@ -314,9 +326,10 @@ export class Hud {
     if (!g) return;
     const S = this.minimap.width;
     const half = WORLD_SIZE / 2;
-    const span = this.bigMap ? WORLD_SIZE * 0.85 : 150;
-    const cx = this.bigMap ? 0 : px;
-    const cz = this.bigMap ? 0 : pz;
+    // the big map frames the open land (valley + Mikuláš), not the empty mountains around it
+    const span = this.bigMap ? 720 : 150;
+    const cx = this.bigMap ? 125 : px;
+    const cz = this.bigMap ? 15 : pz;
     const toMap = (x: number, z: number): [number, number] => [((x - cx) / span + 0.5) * S, ((z - cz) / span + 0.5) * S];
     g.save();
     g.clearRect(0, 0, S, S);

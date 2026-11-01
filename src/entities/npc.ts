@@ -28,6 +28,14 @@ export class Npc extends Actor {
   private schedule: SleepSchedule | null = null;
   private routine: Routine = 'out';
   private routineTimer = 0;
+  /** Fixed round (the výberca walking from stall to stall); null = wander/stand. */
+  private route: THREE.Vector3[] | null = null;
+  private routeIndex = 0;
+  private routePause = 0;
+  /** Called whenever the round reaches a stop. */
+  onRouteStop: ((npc: Npc, index: number) => void) | null = null;
+  /** Stops the round (e.g. the robbed výberca stands and shouts). */
+  halted = false;
 
   constructor(
     readonly id: NpcId,
@@ -55,6 +63,12 @@ export class Npc extends Actor {
   /** Give the villager a house to sleep in (hours may wrap past midnight). */
   sleepsAt(door: THREE.Vector3, bedtime: number, wakeup: number): this {
     this.schedule = { door, bedtime, wakeup };
+    return this;
+  }
+
+  /** Walk a loop of stops, pausing at each one. */
+  walksRoute(points: THREE.Vector3[]): this {
+    this.route = points;
     return this;
   }
 
@@ -122,6 +136,9 @@ export class Npc extends Actor {
       const d = walkTo(s.door.x, s.door.z, 1.6);
       // nobody watches – or the way is blocked: just be home already
       if (d < 0.8 || this.routineTimer > 40 || playerPos.distanceTo(this.position) > 60) this.goInside(world);
+    } else if (this.route && this.routine === 'out') {
+      // busy people do not stop for the captain – which is what makes them easy to rob
+      if (!this.halted) this.followRoute(this.route, dt, walkTo);
     } else if (near && this.basePose === 'normal') {
       this.faceTowards(playerPos, 5, dt);
     } else if (this.routine === 'woken') {
@@ -141,6 +158,19 @@ export class Npc extends Actor {
     if (this.basePose === 'normal') {
       this.body.steer(vx, vz, 6, dt);
       this.body.integrate(dt, world);
+    }
+  }
+
+  private followRoute(route: THREE.Vector3[], dt: number, walkTo: (x: number, z: number, speed: number) => number): void {
+    if (this.routePause > 0) {
+      this.routePause -= dt;
+      return;
+    }
+    const stop = route[this.routeIndex % route.length];
+    if (walkTo(stop.x, stop.z, 1.2) < 0.6) {
+      this.routePause = 4 + Math.random() * 2;
+      this.onRouteStop?.(this, this.routeIndex % route.length);
+      this.routeIndex++;
     }
   }
 

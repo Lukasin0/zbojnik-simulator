@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { LOC, PLAY_RADIUS, WATER_LEVEL, WORLD_SIZE } from '@/config/constants';
+import { BOUNDS_MARGIN, LOC, REGIONS, WATER_LEVEL, WORLD_SIZE } from '@/config/constants';
 import type { GroundProvider } from '@/components/physics-body';
 import { fbm, mulberry32, randRange, smoothstep } from '@/utils/math-utils';
 import { bakeStatic, mat } from './materials';
 import { Mist } from './mist';
 import type { NightReceiver } from './day-night';
-import { Terrain, isMud, pathDistance, riverZ, roadZ } from './terrain';
+import { Terrain, isMud, outsideDistance, pathDistance, riverZ, roadZ } from './terrain';
 import {
   createBarrel,
   createBench,
@@ -22,8 +22,13 @@ import {
   createKrcma,
   createSheep,
   createSign,
+  createPillory,
   createSpruceGeometries,
+  createStall,
   createTable,
+  createTownHall,
+  createTownHouse,
+  type StallGoods,
   createVatraPile,
   createWell,
 } from './props';
@@ -79,6 +84,9 @@ export class World implements GroundProvider, NightReceiver {
   readonly mist: Mist;
   /** Where each villager goes to bed – a spot just outside their door. */
   readonly doors: Record<string, THREE.Vector3> = {};
+  /** Where the Mikuláš market vendors stand – behind their stalls. */
+  readonly stalls: THREE.Vector3[] = [];
+  posterPos = new THREE.Vector3();
   /** Lanterns & forge – brighter after dark. */
   private readonly nightLights: { light: THREE.PointLight; base: number }[] = [];
   /** Shared window-glass material of every house – glows warm at night. */
@@ -97,7 +105,7 @@ export class World implements GroundProvider, NightReceiver {
     this.root.add(this.terrain.mesh);
 
     this.water = new THREE.Mesh(
-      new THREE.PlaneGeometry(WORLD_SIZE, 70, 60, 6),
+      new THREE.PlaneGeometry(WORLD_SIZE, 70, 120, 6),
       new THREE.MeshStandardMaterial({ color: 0x46677a, roughness: 0.25, metalness: 0.1, transparent: true, opacity: 0.86, flatShading: true }),
     );
     this.water.rotation.x = -Math.PI / 2;
@@ -114,6 +122,7 @@ export class World implements GroundProvider, NightReceiver {
     this.buildSalas();
     this.buildTerchova();
     this.buildCastle();
+    this.buildMikulas();
     this.buildRoadside();
     const ax = LOC.ambushX;
     const az = roadZ(ax) - 5.5;
@@ -233,12 +242,24 @@ export class World implements GroundProvider, NightReceiver {
     return hit;
   }
 
+  /** Keeps actors inside the union of region discs (plus the slope margin). */
   clampToBounds(p: THREE.Vector3): void {
-    const r = Math.hypot(p.x, p.z);
-    if (r > PLAY_RADIUS) {
-      p.x *= PLAY_RADIUS / r;
-      p.z *= PLAY_RADIUS / r;
+    let best: (typeof REGIONS)[number] | null = null;
+    let bestOver = Infinity;
+    for (const r of REGIONS) {
+      const over = Math.hypot(p.x - r.x, p.z - r.z) - (r.r + BOUNDS_MARGIN);
+      if (over <= 0) return;
+      if (over < bestOver) {
+        bestOver = over;
+        best = r;
+      }
     }
+    if (!best) return;
+    const dx = p.x - best.x;
+    const dz = p.z - best.z;
+    const k = (best.r + BOUNDS_MARGIN) / Math.hypot(dx, dz);
+    p.x = best.x + dx * k;
+    p.z = best.z + dz * k;
   }
 
   isMud(x: number, z: number): boolean {
@@ -249,7 +270,7 @@ export class World implements GroundProvider, NightReceiver {
   setWetness(w: number): void {
     if (Math.abs(w - this.wetness) < 0.002) return;
     this.wetness = w;
-    const m = this.terrain.mesh.material as THREE.MeshStandardMaterial;
+    const m = this.terrain.material;
     m.color.setScalar(1 - w * 0.32);
     m.roughness = 0.95 - w * 0.4;
   }
@@ -425,6 +446,60 @@ export class World implements GroundProvider, NightReceiver {
     this.place(createChest(), this.chestPos.x, this.chestPos.z, 0, 1.1, 0.7, 0);
   }
 
+  /** Liptovský Mikuláš: market square, radnica, burgher houses, the fair and the inn. */
+  private buildMikulas(): void {
+    const m = LOC.mikulas;
+    this.place(createTownHall(), m.x, m.z - 32, 0, 12, 8);
+    this.doors.vyberca = this.doorOf(m.x, m.z - 32, 0, 8);
+    this.place(createChurch(), m.x + 50, m.z - 14, -Math.PI / 2, 7, 20);
+    const plaster = [0xe8dcc0, 0xe6c99a, 0xd8e0d0, 0xeed6c4, 0xe0d0a8];
+    const west = [-14, -2, 10];
+    west.forEach((dz, i) => {
+      this.place(createTownHouse(7, 6, plaster[i]), m.x - 39, m.z + dz, Math.PI / 2, 7, 6);
+      this.doors[`mestoW${i}`] = this.doorOf(m.x - 39, m.z + dz, Math.PI / 2, 6);
+    });
+    [2, 14].forEach((dz, i) => {
+      this.place(createTownHouse(7, 6, plaster[3 + i]), m.x + 39, m.z + dz, -Math.PI / 2, 7, 6);
+      this.doors[`mestoE${i}`] = this.doorOf(m.x + 39, m.z + dz, -Math.PI / 2, 6);
+    });
+    // hostinec on the south-east corner
+    this.place(createTownHouse(9, 7, 0xd8c8a8), m.x + 39, m.z + 28, -Math.PI / 2, 9, 7);
+    this.doors.hostinec = this.doorOf(m.x + 39, m.z + 28, -Math.PI / 2, 7);
+    const inn = createSign('HOSTINEC');
+    inn.position.set(m.x + 33.5, this.groundHeight(m.x + 33.5, m.z + 23), m.z + 23);
+    inn.rotation.y = -Math.PI / 2;
+    this.root.add(inn);
+
+    // the fair – two rows of stalls facing the aisle
+    const stalls: [number, number, number, number, StallGoods][] = [
+      [-22, -8, 0, 0xb3261e, 'hrnce'],
+      [-12, -8, 0, 0x2e5a8a, 'kapusta'],
+      [12, -8, 0, 0x3d6b3a, 'medovniky'],
+      [22, -8, 0, 0xc9a227, 'cizmy'],
+      [-17, 8, Math.PI, 0x6a2a5a, 'kapusta'],
+      [17, 8, Math.PI, 0xb3261e, 'hrnce'],
+    ];
+    for (const [dx, dz, r, color, goods] of stalls) {
+      this.place(createStall(color, goods), m.x + dx, m.z + dz, r, 3, 1.9, 0);
+      this.stalls.push(this.ground(m.x + dx, m.z + dz - Math.cos(r) * 1.7));
+    }
+    this.place(createWell(), m.x, m.z, 0, 2.2, 2.2);
+    this.place(createPillory(), m.x, m.z + 15, 0, 1.6, 1.6, 0);
+    const poster = createSign('HĽADÁ SA');
+    poster.position.set(m.x + 8, this.groundHeight(m.x + 8, m.z - 26), m.z - 26);
+    this.root.add(poster);
+    this.posterPos = this.ground(m.x + 8, m.z - 25);
+    const lantern = new THREE.PointLight(0xffa860, 12, 18, 1.8);
+    lantern.position.set(m.x, this.groundHeight(m.x, m.z - 26) + 3.4, m.z - 26);
+    this.root.add(lantern);
+    this.nightLights.push({ light: lantern, base: 12 });
+
+    // vdova Hana's hut below the town
+    const h = LOC.hana;
+    this.place(createHut(), h.x, h.z, 0, 5, 4.2);
+    this.doors.hana = this.doorOf(h.x, h.z, 0, 4.2);
+  }
+
   private buildCastle(): void {
     const c = LOC.castle;
     this.place(createCastle(), c.x, c.z, 0, 17, 15, 0.5);
@@ -432,7 +507,7 @@ export class World implements GroundProvider, NightReceiver {
 
   private buildRoadside(): void {
     // milestones & fence posts along the hradská
-    for (let x = -160; x <= 160; x += 40) {
+    for (let x = -160; x <= 400; x += 40) {
       const z = roadZ(x) - 4;
       const stone = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.9, 0.3), mat(0x9a958a));
       stone.position.set(x, this.groundHeight(x, z) + 0.4, z);
@@ -452,6 +527,8 @@ export class World implements GroundProvider, NightReceiver {
       [LOC.terchova.x, LOC.terchova.z, 22],
       [LOC.castle.x, LOC.castle.z, 18],
       [LOC.ambushX, roadZ(LOC.ambushX) - 5.5, 4],
+      [LOC.mikulas.x, LOC.mikulas.z, 62],
+      [LOC.hana.x, LOC.hana.z, 12],
     ];
     return spots.some(([sx, sz, r]) => Math.hypot(x - sx, z - sz) < r);
   }
@@ -463,14 +540,14 @@ export class World implements GroundProvider, NightReceiver {
     const q = new THREE.Quaternion();
     const s = new THREE.Vector3();
     const p = new THREE.Vector3();
-    for (let i = 0; i < 5200 && transforms.length < 1100; i++) {
-      const x = randRange(this.rng, -235, 235);
-      const z = randRange(this.rng, -235, 235);
-      const r = Math.hypot(x, z);
-      if (r > 238) continue;
+    for (let i = 0; i < 11000 && transforms.length < 2000; i++) {
+      const x = randRange(this.rng, -240, 470);
+      const z = randRange(this.rng, -240, 240);
+      const out = outsideDistance(x, z);
+      if (out > 78) continue;
       // denser forest north of the ambush spot (cover for the zbojníci)
       const nearAmbush = Math.hypot(x - LOC.ambushX, z - (roadZ(LOC.ambushX) - 25)) < 28;
-      const density = fbm(x * 0.018 + 11, z * 0.018 - 4, 3) + (nearAmbush ? 0.25 : 0) + (r > 170 ? 0.15 : 0);
+      const density = fbm(x * 0.018 + 11, z * 0.018 - 4, 3) + (nearAmbush ? 0.25 : 0) + (out > 10 ? 0.15 : 0);
       if (density < 0.52) continue;
       if (this.blockedForTrees(x, z)) continue;
       const h = this.groundHeight(x, z);
@@ -480,7 +557,7 @@ export class World implements GroundProvider, NightReceiver {
       s.set(scale, scale * (0.85 + this.rng() * 0.4), scale);
       p.set(x, h - 0.1, z);
       transforms.push(m.compose(p, q, s).clone());
-      if (r < PLAY_RADIUS + 2) this.addCircle(x, z, 0.32 * scale);
+      if (out < BOUNDS_MARGIN + 2) this.addCircle(x, z, 0.32 * scale);
     }
     const trunks = new THREE.InstancedMesh(trunk, mat(0x5a3c26), transforms.length);
     const crowns = new THREE.InstancedMesh(crown, mat(0x2f4f2a), transforms.length);
@@ -503,18 +580,19 @@ export class World implements GroundProvider, NightReceiver {
   private buildRocks(): void {
     const geo = new THREE.DodecahedronGeometry(1, 0);
     const list: THREE.Matrix4[] = [];
-    for (let i = 0; i < 400 && list.length < 160; i++) {
-      const x = randRange(this.rng, -230, 230);
+    for (let i = 0; i < 900 && list.length < 290; i++) {
+      const x = randRange(this.rng, -230, 460);
       const z = randRange(this.rng, -230, 230);
-      if (this.blockedForTrees(x, z)) continue;
-      const scale = 0.4 + this.rng() * 1.4 + (Math.hypot(x, z) > 175 ? 2 : 0);
+      const out = outsideDistance(x, z);
+      if (out > 70 || this.blockedForTrees(x, z)) continue;
+      const scale = 0.4 + this.rng() * 1.4 + (out > 15 ? 2 : 0);
       const m = new THREE.Matrix4().compose(
         new THREE.Vector3(x, this.groundHeight(x, z), z),
         new THREE.Quaternion().setFromEuler(new THREE.Euler(this.rng() * 3, this.rng() * 3, 0)),
         new THREE.Vector3(scale, scale * 0.7, scale),
       );
       list.push(m);
-      if (scale > 0.9 && Math.hypot(x, z) < PLAY_RADIUS) this.addCircle(x, z, scale * 0.8);
+      if (scale > 0.9 && out < BOUNDS_MARGIN) this.addCircle(x, z, scale * 0.8);
     }
     const rocks = new THREE.InstancedMesh(geo, mat(0x7f7b74), list.length);
     list.forEach((m, i) => rocks.setMatrixAt(i, m));

@@ -590,6 +590,45 @@ textarea.save-code {
   color: #c8d6ff;
 }
 
+.suspicion {
+  align-self: flex-end;
+  width: 170px;
+  display: none;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 8px 6px;
+  background: rgba(40, 10, 8, 0.8);
+  border: 1px solid #8f2a22;
+  border-radius: 10px;
+  font-family: var(--display);
+  font-size: 13px;
+  color: #ffb4a0;
+  text-align: center;
+}
+
+.suspicion.show {
+  display: flex;
+  animation: suspicion-pulse 0.9s ease-in-out infinite alternate;
+}
+
+.suspicion i {
+  display: block;
+  height: 6px;
+  width: 0;
+  background: #d8432f;
+  border-radius: 3px;
+  transition: width 0.15s linear;
+}
+
+@keyframes suspicion-pulse {
+  from {
+    box-shadow: 0 0 0 rgba(216, 67, 47, 0);
+  }
+  to {
+    box-shadow: 0 0 10px rgba(216, 67, 47, 0.7);
+  }
+}
+
 .minimap.big {
   width: min(70vh, 70vw);
   height: min(70vh, 70vw);

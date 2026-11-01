@@ -18,14 +18,26 @@ const tmp = new THREE.Vector3();
 
 /** Resolves melee cones and musket ray casts against everything registered. */
 export class CombatSystem {
-  private readonly targets = new Set<Hittable>();
+  private readonly fixed = new Set<Hittable>();
+  /** Lists that come and go (coach escorts, town guards) – read fresh on every query. */
+  private readonly sources: (() => readonly Hittable[])[] = [];
 
   register(h: Hittable): void {
-    this.targets.add(h);
+    this.fixed.add(h);
   }
 
   unregister(h: Hittable): void {
-    this.targets.delete(h);
+    this.fixed.delete(h);
+  }
+
+  addSource(list: () => readonly Hittable[]): void {
+    this.sources.push(list);
+  }
+
+  private targets(): Hittable[] {
+    const all = [...this.fixed];
+    for (const s of this.sources) all.push(...s());
+    return all;
   }
 
   private hostile(attacker: Faction, target: Faction): boolean {
@@ -46,7 +58,7 @@ export class CombatSystem {
     force?: number,
   ): Hittable[] {
     const hits: Hittable[] = [];
-    for (const t of this.targets) {
+    for (const t of this.targets()) {
       if (!t.isAlive() || !this.hostile(faction, t.faction)) continue;
       const dx = t.position.x - origin.x;
       const dz = t.position.z - origin.z;
@@ -64,7 +76,7 @@ export class CombatSystem {
   /** Musket shot: nearest target along the ray (sphere stack approximation). */
   raycast(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number, faction: Faction): { target: Hittable; dist: number } | null {
     let best: { target: Hittable; dist: number } | null = null;
-    for (const t of this.targets) {
+    for (const t of this.targets()) {
       if (!t.isAlive() || !this.hostile(faction, t.faction)) continue;
       const r = Math.max(0.4, t.radius);
       for (const k of [0.3, 0.55, 0.8]) {
@@ -83,7 +95,7 @@ export class CombatSystem {
   nearest(pos: THREE.Vector3, faction: Faction, maxDist: number): Hittable | null {
     let best: Hittable | null = null;
     let bestD = maxDist;
-    for (const t of this.targets) {
+    for (const t of this.targets()) {
       if (!t.isAlive() || t.faction !== faction) continue;
       const d = t.position.distanceTo(pos);
       if (d < bestD) {

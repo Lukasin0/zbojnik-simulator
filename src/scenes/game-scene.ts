@@ -112,7 +112,7 @@ export class GameScene implements GameState {
     const s = g.data.stats;
     const screen = createInfoScreen(
       'Kapitán Liptova',
-      'Prísaha zložená, družina naverbovaná, prvý koč vyžmýkaný a chudoba sa po rokoch najedla do sýta. Legenda o Jánošíkovi sa práve začína… Hra pokračuje voľným režimom – pýtaj si u bača typy na ďalšie koče.',
+      'Prísaha zložená, družina naverbovaná, panský koč vyžmýkaný a výberca Mastný v Mikuláši o pár sto dukátov ľahší. Kramári sa smejú, páni zúria a na plagátoch ti pribudla odmena. Legenda o Jánošíkovi sa práve začína… Pokračovanie nabudúce – zatiaľ si pýtaj u bača typy na ďalšie koče.',
       [
         ['Prepadnuté koče', String(s.coachesRobbed)],
         ['Porazení pandúri', String(s.pandursBeaten)],

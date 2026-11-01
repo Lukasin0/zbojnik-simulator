@@ -15,7 +15,16 @@ export type NpcId =
   | 'sedliak1'
   | 'sedliak2'
   | 'gazdina'
-  | 'ponocny';
+  | 'ponocny'
+  | 'vyberca'
+  | 'kramar1'
+  | 'kramar2'
+  | 'kramar3'
+  | 'kramar4'
+  | 'mestan1'
+  | 'mestan2'
+  | 'hostinsky'
+  | 'hana';
 
 export type QuestStepId =
   | 'c1_talk'
@@ -31,6 +40,12 @@ export type QuestStepId =
   | 'c3_lup'
   | 'c3_rozdel'
   | 'c3_ukry'
+  | 'c4_tip'
+  | 'c4_prestroj'
+  | 'c4_cesta'
+  | 'c4_vreckuj'
+  | 'c4_utek'
+  | 'c4_rozdel'
   | 'free';
 
 export type MinigameKind = 'fujara' | 'paka' | 'halusky';

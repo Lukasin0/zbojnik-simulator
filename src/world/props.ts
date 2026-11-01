@@ -170,6 +170,115 @@ export function createWell(): THREE.Group {
   return g;
 }
 
+// --------------------------------------------------------------------------- Liptovský Mikuláš
+
+const TILE_ROOF = 0x7a3a2a;
+const GLASS = 0x23262a;
+
+/** Adds a row of windows on the front (+Z) wall at height y. */
+function frontWindows(g: THREE.Group, w: number, d: number, y: number, count: number): void {
+  for (let i = 0; i < count; i++) {
+    const x = (i - (count - 1) / 2) * (w / count);
+    g.add(at(part(new THREE.BoxGeometry(0.8, 0.95, 0.08), 0xf2ecdc), x, y, d / 2 + 0.03));
+    g.add(at(part(new THREE.BoxGeometry(0.58, 0.72, 0.1), GLASS), x, y, d / 2 + 0.03));
+  }
+}
+
+/** Two-storey plastered burgher house with a tiled roof. The door faces +Z. */
+export function createTownHouse(w: number, d: number, wall: number): THREE.Group {
+  const h = 4.6;
+  const g = createHouse({ w, d, h, wall, roof: TILE_ROOF, roofH: w * 0.5, seams: false, chimney: true });
+  frontWindows(g, w, d, 0.4 + h * 0.8, 3);
+  // cornice between the floors
+  g.add(at(part(new THREE.BoxGeometry(w + 0.1, 0.12, d + 0.1), 0xcfc4ac), 0, 0.4 + h * 0.62, 0));
+  return g;
+}
+
+/** Radnica with a clock tower. The door faces +Z. */
+export function createTownHall(): THREE.Group {
+  const w = 12;
+  const d = 8;
+  const h = 6.2;
+  const g = createHouse({ w, d, h, wall: 0xe9dfc6, roof: TILE_ROOF, roofH: 4, seams: false, windows: false });
+  frontWindows(g, w, d, 0.4 + h * 0.3, 4);
+  frontWindows(g, w, d, 0.4 + h * 0.75, 5);
+  // wide portal
+  g.add(at(part(new THREE.BoxGeometry(2.2, 2.6, 0.14), WOOD_DARK), 0, 1.7, d / 2 + 0.05));
+  const tower = new THREE.Group();
+  tower.add(at(part(new THREE.BoxGeometry(3, 15, 3), 0xe9dfc6), 0, 7.5, 0));
+  tower.add(at(part(new THREE.ConeGeometry(2.4, 4.5, 4), 0x2f3a33), 0, 17.2, 0, 0, Math.PI / 4, 0));
+  tower.add(at(part(new THREE.SphereGeometry(0.3, 6, 4), 0xc9a227, { metalness: 0.7 }), 0, 19.6, 0));
+  // clock face with two hands
+  tower.add(at(part(new THREE.CylinderGeometry(0.9, 0.9, 0.1, 14), 0xf2ecdc), 0, 12, 1.52, Math.PI / 2, 0, 0));
+  tower.add(at(part(new THREE.BoxGeometry(0.08, 0.7, 0.04), 0x1a1410), 0, 12.25, 1.6));
+  tower.add(at(part(new THREE.BoxGeometry(0.5, 0.08, 0.04), 0x1a1410), 0.2, 12, 1.6));
+  tower.position.set(0, 0, -d / 2 + 1.5);
+  g.add(tower);
+  return g;
+}
+
+export type StallGoods = 'hrnce' | 'kapusta' | 'medovniky' | 'cizmy';
+
+/** Market stall with a striped canopy. Customers stand on the +Z side, the vendor behind it. */
+export function createStall(canopy: number, goods: StallGoods): THREE.Group {
+  const g = new THREE.Group();
+  g.add(at(part(new THREE.BoxGeometry(3, 0.1, 1.2), WOOD), 0, 0.9, 0.2));
+  g.add(at(part(new THREE.BoxGeometry(2.9, 0.85, 0.08), WOOD_DARK), 0, 0.45, 0.78));
+  for (const [x, z, hh] of [
+    [-1.45, -0.85, 2.5],
+    [1.45, -0.85, 2.5],
+    [-1.45, 0.8, 2.1],
+    [1.45, 0.8, 2.1],
+  ]) {
+    g.add(at(part(new THREE.BoxGeometry(0.1, hh, 0.1), WOOD_DARK), x, hh / 2, z));
+  }
+  const cloth = new THREE.Group();
+  cloth.add(part(new THREE.BoxGeometry(3.4, 0.05, 2.2), canopy));
+  for (const x of [-1.1, 0, 1.1]) cloth.add(at(part(new THREE.BoxGeometry(0.4, 0.06, 2.21), 0xf2ecdc), x, 0, 0));
+  cloth.position.set(0, 2.32, 0);
+  cloth.rotation.x = 0.18;
+  g.add(cloth);
+  const geos: THREE.BufferGeometry[] = [];
+  let color = 0x9a5a32;
+  for (let i = 0; i < 5; i++) {
+    const x = -1.1 + i * 0.55;
+    switch (goods) {
+      case 'hrnce':
+        color = 0xa8603a;
+        geos.push(new THREE.CylinderGeometry(0.17, 0.12, 0.3, 8).translate(x, 1.1, 0.2));
+        geos.push(new THREE.TorusGeometry(0.15, 0.03, 4, 8).rotateX(Math.PI / 2).translate(x, 1.25, 0.2));
+        break;
+      case 'kapusta':
+        color = 0x7fa04a;
+        geos.push(new THREE.IcosahedronGeometry(0.2, 0).translate(x, 1.15, 0.05));
+        geos.push(new THREE.IcosahedronGeometry(0.18, 0).translate(x + 0.25, 1.13, 0.4));
+        break;
+      case 'medovniky':
+        color = 0x8a4a22;
+        geos.push(new THREE.CylinderGeometry(0.16, 0.16, 0.04, 6).rotateX(Math.PI / 2.4).translate(x, 1.12, 0.2));
+        break;
+      case 'cizmy':
+        color = 0x2a1a12;
+        geos.push(new THREE.BoxGeometry(0.12, 0.34, 0.14).translate(x, 1.12, 0.1));
+        geos.push(new THREE.BoxGeometry(0.12, 0.08, 0.26).translate(x, 0.99, 0.16));
+        break;
+    }
+  }
+  const merged = mergeGeometries(geos.map((x) => x.toNonIndexed()), false);
+  if (merged) g.add(part(merged, color));
+  return g;
+}
+
+/** Pranier – the pillory on the square (empty… for now). */
+export function createPillory(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(at(part(new THREE.BoxGeometry(1.6, 0.3, 1.6), STONE), 0, 0.15, 0));
+  g.add(at(part(new THREE.BoxGeometry(0.22, 2.6, 0.22), WOOD_DARK), 0, 1.5, 0));
+  g.add(at(part(new THREE.BoxGeometry(1.4, 0.32, 0.14), WOOD), 0, 1.75, 0.15));
+  for (const x of [-0.45, 0, 0.45]) g.add(at(part(new THREE.CylinderGeometry(0.08, 0.08, 0.16, 6), 0x1a1410), x, 1.75, 0.16, Math.PI / 2, 0, 0));
+  return g;
+}
+
 export function createKoliba(): THREE.Group {
   return createHouse({ w: 6, d: 5, h: 2.3, roofH: 3.2, roof: 0x55452f, chimney: true });
 }

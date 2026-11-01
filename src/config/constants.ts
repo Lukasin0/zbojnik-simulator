@@ -1,14 +1,32 @@
 import type { ItemId } from '@/types/game-types';
 
 // --- World -------------------------------------------------------------------
-export const WORLD_SIZE = 520;
-export const TERRAIN_SEGMENTS = 130;
-export const PLAY_RADIUS = 192;
+export const WORLD_SIZE = 1040;
+export const TERRAIN_SEGMENTS = 250;
+/** Terrain is split into CHUNKS×CHUNKS meshes so whatever is behind the camera is culled. */
+export const TERRAIN_CHUNKS = 10;
 export const WATER_LEVEL = -0.9;
 export const ROAD_HEIGHT = 1.4;
 export const ROAD_HALF_WIDTH = 3.2;
 export const ROAD_START_X = -175;
 export const ROAD_END_X = 175;
+
+export interface Region {
+  x: number;
+  z: number;
+  r: number;
+}
+
+/**
+ * The open land is a union of discs – mountains rise outside it and the captain
+ * can walk BOUNDS_MARGIN metres up the slopes before the edge stops him.
+ */
+export const REGIONS: readonly Region[] = [
+  { x: 0, z: 0, r: 160 }, // dolina: dedina, Rovná hora, salaš, Terchová, hrad
+  { x: 185, z: 88, r: 78 }, // údolie Váhu na východ
+  { x: 330, z: 68, r: 100 }, // Liptovský Mikuláš
+];
+export const BOUNDS_MARGIN = 32;
 
 // --- Simulation --------------------------------------------------------------
 export const FIXED_DT = 1 / 60;
@@ -78,6 +96,12 @@ export const ECONOMY = {
   klobukPrice: 40,
   krpcePrice: 30,
   storyLoot: 140,
+  disguisePrice: 20,
+  /** výberca's purse at the Mikuláš fair */
+  collectorPurse: 180,
+  /** what the widow Hana gets back for the robbed market folk */
+  hanaShare: 60,
+  innPrice: 3,
 } as const;
 
 export interface ItemDef {
@@ -120,6 +144,10 @@ export const LOC = {
   kotlik: { x: -80, z: 46 },
   terchova: { x: 118, z: -72 },
   castle: { x: -140, z: 8 },
+  /** námestie Liptovského Mikuláša */
+  mikulas: { x: 330, z: 58 },
+  /** vdova Hana – chalupa pod mestom pri hradskej */
+  hana: { x: 268, z: 84 },
   ambushX: 20,
 } as const;
 

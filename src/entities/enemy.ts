@@ -49,6 +49,16 @@ export class Pandur extends Actor {
     this.state = 'chase';
   }
 
+  /** The zbojník got away – back to guard duty, bruises forgotten. */
+  calmDown(): void {
+    if (this.state === 'dead') return;
+    this.state = 'idle';
+    this.pose = 'normal';
+    this.attackT = -1;
+    this.drowsy = 0;
+    this.hp = this.maxHp;
+  }
+
   fallAsleep(): void {
     if (this.state === 'dead' || this.alerted) return;
     this.state = 'sleepy';

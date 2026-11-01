@@ -4,6 +4,7 @@ import { LOC } from '@/config/constants';
 import { QUEST_STEPS } from '@/systems/quest-system';
 import type { WeatherKind } from '@/world/weather';
 import type { AttackAnim } from '@/entities/attacks';
+import type { QuestStepId } from '@/types/game-types';
 
 interface DebugCommands {
   god(on?: boolean): string;
@@ -21,6 +22,10 @@ interface DebugCommands {
   state(): unknown;
   pools(): unknown;
   npcs(): unknown;
+  town(): unknown;
+  step(id: QuestStepId): string;
+  disguise(on: boolean): string;
+  halt(on: boolean): string;
 }
 
 declare global {
@@ -128,9 +133,33 @@ export function installDebugTools(game: Game, loop: GameLoop): void {
         id: n.id,
         visible: n.model.root.visible,
         asleep: n.asleep,
-        x: Math.round(n.position.x),
-        z: Math.round(n.position.z),
+        x: Math.round(n.position.x * 10) / 10,
+        z: Math.round(n.position.z * 10) / 10,
+        facing: Math.round(n.facing * 100) / 100,
       }));
+    },
+    town() {
+      return {
+        alarm: game.town.alarm,
+        disguised: game.disguised,
+        step: game.data.questStep,
+        guards: game.town.guards.map((g) => ({ hp: Math.round(g.hp), state: g.state, x: Math.round(g.position.x), z: Math.round(g.position.z) })),
+      };
+    },
+    step(id) {
+      game.data.questStep = id;
+      game.data.questCounter = 0;
+      return `quest → ${id}`;
+    },
+    halt(on) {
+      const v = game.npcs.get('vyberca');
+      if (v) v.halted = on;
+      return `výberca ${on ? 'stojí' : 'chodí'}`;
+    },
+    disguise(on) {
+      game.data.flags.hasDisguise = true;
+      game.setDisguise(on);
+      return `prestrojenie ${on ? 'ON' : 'OFF'}`;
     },
   };
   console.info('%cZbojník debug: F3 = overlay, window.zbojnik.{god, money, skip, coach, tp, heal, look, time, weather, state, pools}', 'color:#d9b24a');

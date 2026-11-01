@@ -1,5 +1,14 @@
 import * as THREE from 'three';
-import { LOC, ROAD_HALF_WIDTH, ROAD_HEIGHT, TERRAIN_SEGMENTS, WATER_LEVEL, WORLD_SIZE } from '@/config/constants';
+import {
+  LOC,
+  REGIONS,
+  ROAD_HALF_WIDTH,
+  ROAD_HEIGHT,
+  TERRAIN_CHUNKS,
+  TERRAIN_SEGMENTS,
+  WATER_LEVEL,
+  WORLD_SIZE,
+} from '@/config/constants';
 import { clamp, fbm, lerp, smoothstep, valueNoise } from '@/utils/math-utils';
 
 export function riverZ(x: number): number {
@@ -10,17 +19,31 @@ export function roadZ(x: number): number {
   return riverZ(x) - 16;
 }
 
+/** Polynomial smooth minimum – blends the region discs without creases in the slopes. */
+function smin(a: number, b: number, k: number): number {
+  const h = clamp(0.5 + (0.5 * (b - a)) / k, 0, 1);
+  return lerp(b, a, h) - k * h * (1 - h);
+}
+
+/** Metres outside the open land (negative inside). Mountains rise where this is positive. */
+export function outsideDistance(x: number, z: number): number {
+  let d = Infinity;
+  for (const r of REGIONS) {
+    const di = Math.hypot(x - r.x, z - r.z) - r.r;
+    d = d === Infinity ? di : smin(d, di, 30);
+  }
+  return d;
+}
+
 function baseHeight(x: number, z: number): number {
   let h = 1.2 + fbm(x * 0.011 + 3.1, z * 0.011 - 7.3, 4) * 9;
   const dv = Math.hypot(x - LOC.vatra.x, z - LOC.vatra.z);
   h += 15 * Math.exp(-(dv * dv) / (2 * 26 * 26));
   const dc = Math.hypot(x - LOC.castle.x, z - LOC.castle.z);
   h += 13 * Math.exp(-(dc * dc) / (2 * 16 * 16));
-  const r = Math.hypot(x, z);
-  if (r > 160) {
-    const t = r - 160;
-    h += t * t * 0.03 + t * 0.9 * fbm(x * 0.04, z * 0.04, 3);
-  }
+  // the ridge levels off into a plateau – endless walls would poke out past the far plane
+  const t = Math.min(70, outsideDistance(x, z));
+  if (t > 0) h += t * t * 0.03 + t * 0.9 * fbm(x * 0.04, z * 0.04, 3);
   return h;
 }
 
@@ -37,7 +60,14 @@ const FLATS: Flat[] = [
   { x: LOC.terchova.x, z: LOC.terchova.z, r: 18, h: baseHeight(LOC.terchova.x, LOC.terchova.z) },
   { x: LOC.vatra.x, z: LOC.vatra.z, r: 9, h: baseHeight(LOC.vatra.x, LOC.vatra.z) },
   { x: LOC.castle.x, z: LOC.castle.z, r: 9, h: baseHeight(LOC.castle.x, LOC.castle.z) },
+  { x: LOC.mikulas.x, z: LOC.mikulas.z, r: 44, h: 2.4 },
+  { x: LOC.hana.x, z: LOC.hana.z, r: 8, h: 2.2 },
 ];
+
+/** Cobbled market square of Liptovský Mikuláš. */
+export function isSquare(x: number, z: number): boolean {
+  return Math.abs(x - LOC.mikulas.x) < 32 && Math.abs(z - LOC.mikulas.z) < 24;
+}
 
 /** Dirt paths between places (drawn into vertex colors). */
 const PATHS: [number, number, number, number][] = [
@@ -49,6 +79,9 @@ const PATHS: [number, number, number, number][] = [
   [-30, -30, -62, -74],
   [60, 0, 95, -40],
   [95, -40, 116, -66],
+  // Mikuláš: from the hradská up to the square, and to the widow's hut
+  [330, 82, 330, roadZ(330)],
+  [LOC.hana.x, LOC.hana.z + 3, LOC.hana.x + 4, roadZ(LOC.hana.x + 4)],
 ];
 
 function distToSegment(px: number, pz: number, ax: number, az: number, bx: number, bz: number): number {
@@ -71,10 +104,13 @@ export function heightAt(x: number, z: number): number {
     const d = Math.hypot(x - f.x, z - f.z);
     if (d < f.r + 14) h = lerp(h, f.h, smoothstep(f.r + 14, f.r, d));
   }
+  // the road and the Váh cut a gorge through the mountains, which closes further out –
+  // otherwise the sky would show through the slot at the end of the world
+  const open = smoothstep(95, 45, outsideDistance(x, z));
   const dRoad = Math.abs(z - roadZ(x));
-  if (dRoad < 12) h = lerp(h, ROAD_HEIGHT, smoothstep(12, 3.5, dRoad));
+  if (dRoad < 12) h = lerp(h, ROAD_HEIGHT, smoothstep(12, 3.5, dRoad) * open);
   const dRiver = Math.abs(z - riverZ(x));
-  if (dRiver < 13) h = lerp(h, -2.6, smoothstep(13, 5, dRiver));
+  if (dRiver < 13) h = lerp(h, -2.6, smoothstep(13, 5, dRiver) * open);
   return h;
 }
 
@@ -102,13 +138,16 @@ const C = {
   bed: new THREE.Color(0x5b5a48),
   bank: new THREE.Color(0x8f8a6a),
   field: new THREE.Color(0x5e4630),
+  cobble: new THREE.Color(0x8a8378),
+  cobbleDark: new THREE.Color(0x837b70),
 };
 
 export function colorAt(x: number, z: number, h: number, slope: number, out: THREE.Color): THREE.Color {
   if (h < WATER_LEVEL + 0.1) return out.copy(C.bed);
   if (h < 0.2 && Math.abs(z - riverZ(x)) < 14) return out.copy(C.bank);
-  if (isMud(x, z)) return out.copy(C.mud);
-  if (isRoad(x, z)) return out.copy(C.road);
+  if (isSquare(x, z)) return out.copy(valueNoise(x * 0.8, z * 0.8) > 0.5 ? C.cobble : C.cobbleDark);
+  if (h < 8 && isMud(x, z)) return out.copy(C.mud);
+  if (h < 8 && isRoad(x, z)) return out.copy(C.road);
   if (Math.abs(x - LOC.field.x) < 9 && Math.abs(z - LOC.field.z) < 6) {
     return out.copy(Math.floor((z - LOC.field.z + 6) / 1.5) % 2 === 0 ? C.field : C.grassA);
   }
@@ -126,7 +165,9 @@ export function colorAt(x: number, z: number, h: number, slope: number, out: THR
  * mesh and collision so actors stand exactly on the visible surface.
  */
 export class Terrain {
-  readonly mesh: THREE.Mesh;
+  /** Group of terrain chunks (each frustum-culled on its own). */
+  readonly mesh = new THREE.Group();
+  readonly material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
   private readonly heights: Float32Array;
   private readonly n = TERRAIN_SEGMENTS;
   private readonly cell = WORLD_SIZE / TERRAIN_SEGMENTS;
@@ -140,8 +181,18 @@ export class Terrain {
         this.heights[j * (n + 1) + i] = heightAt(i * this.cell - this.half, j * this.cell - this.half);
       }
     }
-    const positions = new Float32Array(n * n * 6 * 3);
-    const colors = new Float32Array(n * n * 6 * 3);
+    const per = Math.ceil(n / TERRAIN_CHUNKS);
+    for (let cj = 0; cj < n; cj += per) {
+      for (let ci = 0; ci < n; ci += per) {
+        this.buildChunk(ci, cj, Math.min(n, ci + per), Math.min(n, cj + per));
+      }
+    }
+  }
+
+  private buildChunk(i0: number, j0: number, i1: number, j1: number): void {
+    const cells = (i1 - i0) * (j1 - j0);
+    const positions = new Float32Array(cells * 6 * 3);
+    const colors = new Float32Array(cells * 6 * 3);
     const col = new THREE.Color();
     let p = 0;
     const pushTri = (verts: number[][], cx: number, cz: number, slope: number, hAvg: number): void => {
@@ -157,8 +208,8 @@ export class Terrain {
         p += 3;
       }
     };
-    for (let j = 0; j < n; j++) {
-      for (let i = 0; i < n; i++) {
+    for (let j = j0; j < j1; j++) {
+      for (let i = i0; i < i1; i++) {
         const x0 = i * this.cell - this.half;
         const z0 = j * this.cell - this.half;
         const x1 = x0 + this.cell;
@@ -197,9 +248,10 @@ export class Terrain {
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
-    const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
-    this.mesh = new THREE.Mesh(geo, material);
-    this.mesh.receiveShadow = true;
+    geo.computeBoundingSphere();
+    const chunk = new THREE.Mesh(geo, this.material);
+    chunk.receiveShadow = true;
+    this.mesh.add(chunk);
   }
 
   private h(i: number, j: number): number {

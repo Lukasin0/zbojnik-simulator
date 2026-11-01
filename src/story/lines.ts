@@ -228,6 +228,73 @@ export const PONOCNY_TALK: readonly string[] = [
   'V noci počuť všetko – kto chrápe, kto sa háda, kto kradne slaninu z komory. To posledné bol Gajdošík.',
 ];
 
+// ---------------------------------------------------------------- Liptovský Mikuláš
+
+/** Výberca at a stall. */
+export const VYBERCA_TAX: readonly string[] = [
+  'Daň z hrncov! A z toho, že sú prázdne, ďalšia daň.',
+  'Kapusta? Daň z kapusty. To je taká… zelená daň, hehe.',
+  'Ty dýchaš? Daň zo vzduchu, prosím. Liptovský vzduch je drahý.',
+  'Medovníky? Jeden pre mňa, jeden pre pána grófa. A tri pre mňa.',
+  'Čižmy? Daň z chodenia. Bosí platia polovicu.',
+  'Na jarmoku sa smeje? Daň zo smiechu! Plačúci sú oslobodení.',
+];
+
+/** What the vendor mutters after the výberca leaves. */
+export const KRAMAR_GRUMBLE: readonly string[] = [
+  'Bodaj ťa husi rozšliapali…',
+  'Keby tak prišiel Jánošík, ten by ti ukázal daň…',
+  'Bodaj ti v mešci myši hniezdo spravili.',
+  'Zas mi nechal len gombík. Aj ten je jeho.',
+];
+
+export const KRAMAR_TALK: readonly string[] = [
+  'Hrnce, hrnce! Do hrnca sa zmestí aj kapusta, aj daň – len to druhé nevaríme.',
+  'Kapusta ako hlava! Ako hlava výbercu – veľká a dutá.',
+  'Medovníky srdiečka! Pre frajerku, pre mamu, alebo pre pandúra, nech je milší.',
+  'Čižmy z teľacej kože. Utečiete v nich aj pred exekútorom.',
+  'Vravia, že Jánošík chodí po jarmokoch prezlečený. Ja by som ho spoznal hneď! …Vy ste kto, pán handlár?',
+];
+
+export const MESTAN_TALK: readonly string[] = [
+  'V Mikuláši máme radnicu, kostol a pranier. Pranier je najnavštevovanejší.',
+  'Výberca Mastný? Ten by zdanil aj dážď, keby vedel, komu patrí.',
+  'Na plagáte je Jánošík taký škaredý, že ho určite nechytia. Nikto taký nevyzerá.',
+  'Ste z Liptova? Vidno – máte blato až po kolená. Aj my.',
+];
+
+export const GUARD_SUSPECT: readonly string[] = [
+  'Hej, ty! Tá tvár mi je odniekiaľ známa…',
+  'Stoj! Nie si ty náhodou ten… z plagátu?',
+  'Ten klobúk, tie vrkoče… Kapitán, poďte sa pozrieť!',
+];
+
+export const GUARD_DISGUISED: readonly string[] = [
+  'Dobrý deň, pán handlár. Dane ste zaplatili?',
+  'Handlár? Nejaký vysoký na handlára. No, každý nejaký je.',
+  'Nič som nevidel, nič neviem, mám službu.',
+];
+
+export const TOWN_ALARM: readonly string[] = [
+  'Je to Jánošík! Brrrána! Zavrite brrrány! …My nemáme brány?!',
+  'Zbojník v meste! Chráňte radnicu! A hlavne výbercu!',
+  'Chyťte ho! Odmena sto zlatých! …Delíme napoly, Jano!',
+];
+
+export const VYBERCA_ROBBED: readonly string[] = [
+  'Môj mešec!!! Zlodej! Pandúri, kde ste, keď vás treba?!',
+  'Okradli ma! Mňa! Výbercu! To je… to je daňový podvod!',
+];
+
+/** Text of the wanted poster on the radnica square. */
+export const POSTER_TEXT =
+  'HĽADÁ SA: Juraj Jánošík, zbojník z Terchovej.\n\nZnaky: široký opasok, klobúk s pierkom, vrkoče, drzý úsmev. Kradne bohatým, dáva chudobným (to je obzvlášť podozrivé).\n\nOdmena: 100 zlatých. Kto ho udá, nemusí rok platiť daň z komína.\n\n— Slávna stolica Liptovská';
+
+export const HANA_THANKS: readonly string[] = [
+  'Pán Boh zaplať, chlapče. Rozdám to kramárom, čo im ten Mastný vzal. A kúsok si nechám na múku.',
+  'Ty si… ty si on, však? Nič nehovor. Ja som nič nevidela, len dobrého človeka.',
+];
+
 export const HOUR_NAMES = [
   'polnoc', 'jedna', 'druhá', 'tretia', 'štvrtá', 'piata', 'šiesta', 'siedma', 'ôsma', 'deviata', 'desiata', 'jedenásta',
 ] as const;

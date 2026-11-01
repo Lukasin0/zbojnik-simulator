@@ -218,3 +218,76 @@ export const GAZDINA: CharacterLook = {
   hair: 0x3a2018,
   height: 0.95,
 };
+
+// ---------------------------------------------------------------- Liptovský Mikuláš
+
+/** Výberca daní Gašpar Mastný – well fed on other people's taxes. */
+export const VYBERCA: CharacterLook = {
+  skin: 0xe8b090,
+  hair: 0x5a4030,
+  shirt: 0xf2efe8,
+  pants: 0x2a2420,
+  shoes: 0x1a1412,
+  coat: 0x6a1f1a,
+  coatLong: true,
+  trim: COLORS.gold,
+  belt: 0x1a1412,
+  hat: 'cap',
+  hatColor: 0x1a1412,
+  mustache: true,
+  weapon: 'none',
+  girth: 1.55,
+};
+
+export const KRAMAR: CharacterLook = {
+  ...SEDLIAK,
+  vest: 0x5a3a22,
+  hat: 'cap',
+  hatColor: 0x4a3a2a,
+  mustache: true,
+  girth: 1.15,
+};
+
+export const KRAMARKA: CharacterLook = {
+  ...KATARINA,
+  hair: 0x4a3020,
+  skirt: 0x8a3a2a,
+  apron: 0xe8dcc0,
+  hatColor: 0x2e5a8a,
+  height: 0.96,
+};
+
+export const MESTAN: CharacterLook = {
+  skin: 0xdcae90,
+  hair: 0x3a2a1c,
+  shirt: 0xe6dccb,
+  pants: 0x3a3a42,
+  shoes: 0x1a1412,
+  coat: 0x2e3e5a,
+  belt: 0x1a1412,
+  hat: 'zbojnik',
+  hatColor: 0x2a2420,
+  weapon: 'none',
+};
+
+export const HOSTINSKY: CharacterLook = {
+  ...KRCMAR,
+  vest: 0x6a2a2a,
+  hair: 0x8a6a4a,
+  girth: 1.35,
+};
+
+export const HANA: CharacterLook = {
+  ...KATARINA,
+  hair: 0x6a6258,
+  skirt: 0x2a2626,
+  apron: 0x4a4440,
+  hatColor: 0x1a1818,
+  height: 0.94,
+};
+
+/** Handlársky kabát – what Jánošík wears to sneak into town. */
+export const DISGUISE = {
+  coat: 0x6a5640,
+  cap: 0x3a3028,
+} as const;
