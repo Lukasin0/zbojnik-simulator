@@ -41,6 +41,7 @@ import { EventEmitter } from '@/utils/event-emitter';
 import { mulberry32, pick } from '@/utils/math-utils';
 import { Scheduler } from '@/utils/timer';
 import { World } from '@/world/world';
+import { DayNight } from '@/world/day-night';
 
 export const COMPANION_DEFS: Record<CompanionId, { name: string; look: CharacterLook; slot: { side: number; back: number } }> = {
   uhorcik: { name: 'Uhorčík', look: UHORCIK, slot: { side: -1.7, back: 2.2 } },
@@ -73,6 +74,7 @@ export class Game {
   readonly hud: Hud;
   readonly quests: QuestSystem;
   readonly scheduler = new Scheduler();
+  readonly dayNight = new DayNight();
   readonly dialogBox: DialogBox;
   readonly rng = mulberry32(Date.now() & 0xffff);
   data: SaveData = createNewSave();
@@ -106,7 +108,11 @@ export class Game {
     this.world = new World(app.scene);
     this.particles = new ParticleSystem(app.scene);
     this.particles.density = app.preset.particleDensity;
-    app.onQualityChange = (p) => (this.particles.density = p.particleDensity);
+    this.world.mist.setEnabled(app.preset.mist);
+    app.onQualityChange = (p) => {
+      this.particles.density = p.particleDensity;
+      this.world.mist.setEnabled(p.mist);
+    };
     this.cameraCtl = new CameraController(app.camera, (x, z) => this.world.groundHeight(x, z));
     this.cameraCtl.occluders = this.world.occluders;
     this.ambush = new AmbushSystem(app.scene, this.world);
@@ -145,6 +151,7 @@ export class Game {
       onJump: () => this.sfx('jump'),
       onHurt: () => undefined,
       onNoStamina: () => this.toastOnce('stamina', 'Nemáš dosť síl – oddýchni si chvíľu.', 'bad'),
+      onReloading: () => this.toastOnce('reload', 'Kresadlovka sa ešte nabíja…', 'info', 2),
     };
 
     this.events.on('toast', ({ text, kind }) => this.hud.toast(text, kind));
@@ -214,6 +221,7 @@ export class Game {
       this.data.questCounter = 0;
     }
 
+    this.dayNight.setTime(this.data.timeOfDay);
     const p = this.data.player;
     this.player.teleport(p.x, p.z, this.world);
     this.player.stamina = p.stamina;
@@ -481,6 +489,7 @@ export class Game {
       stamina: Math.round(p.stamina),
       raz: Math.round(p.raz),
     };
+    this.data.timeOfDay = Math.round(this.dayNight.time * 100) / 100;
     return JSON.parse(JSON.stringify(this.data)) as SaveData;
   }
 
@@ -641,6 +650,7 @@ export class Game {
     for (const npc of this.npcs.values()) npc.update(dt, this.world, this.player.position);
     this.separateActors();
 
+    this.dayNight.update(dt);
     this.world.update(dt, this.time);
     this.particles.update(dt);
     this.emitFireParticles();
@@ -822,8 +832,9 @@ export class Game {
     for (const n of this.npcs.values()) n.render(alpha, frameDt);
     this.ambush.render(alpha, frameDt, this.time);
 
-    this.cameraCtl.update(this.player.model.root.position, frameDt);
-    this.app.followSun(this.player.model.root.position);
+    this.cameraCtl.update(this.player.model.root.position, frameDt, false, this.player.aiming);
+    this.dayNight.apply(this.app, this.world, this.player.model.root.position, frameDt);
+    this.hud.setClock(`${this.dayNight.clock()} · ${this.dayNight.periodName()}`, this.dayNight.night > 0.5);
     this.audio.update(this.app.camera.position, this.cameraCtl.yaw);
 
     const obj = this.objectivePosition();
@@ -857,6 +868,8 @@ export class Game {
       objective: this.quests.objectiveText(),
       hint: this.quests.def.hint ?? '',
       crosshair: this.input.pointerLocked && this.scenes.top?.name === 'play',
+      aiming: this.cameraCtl.aimAmount > 0.5,
+      reload: this.player.reloadProgress,
       buff: buff.join(' · '),
       clickHint: !this.input.pointerLocked && !this.input.usingGamepad && this.scenes.top?.name === 'play',
     });
@@ -889,7 +902,9 @@ export class Game {
     this.player.render(1, frameDt);
     const v = this.world.vatraPos;
     this.cameraCtl.orbit(tmpV.set(v.x, v.y + 2, v.z), 34, 14, this.menuTime);
-    this.app.followSun(v);
+    // the title screen lives in an eternal golden sunset by the bonfire
+    this.dayNight.setTime(19.45);
+    this.dayNight.apply(this.app, this.world, v, frameDt);
     if (this.rng() < 0.6) {
       const f = this.world.fires[0];
       if (f) this.particles.emit({ x: f.pos.x, y: f.pos.y + 0.6, z: f.pos.z, count: 1, spread: 0.8, speed: 0.3, up: 2.2, gravity: 1.5, drag: 0.5, color: [0xffb040, 0xff6a10], life: [0.5, 1.1], size: [0.1, 0.2] });

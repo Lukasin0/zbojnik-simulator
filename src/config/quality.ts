@@ -20,6 +20,10 @@ export interface QualityPreset {
   /** Multiplier for particle counts. */
   particleDensity: number;
   drawDistance: number;
+  /** Procedural clouds in the sky shader. */
+  clouds: boolean;
+  /** Valley mist layers (morning / night). */
+  mist: boolean;
 }
 
 export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
@@ -36,6 +40,8 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     msaa: 0,
     particleDensity: 0.4,
     drawDistance: 420,
+    clouds: false,
+    mist: false,
   },
   medium: {
     label: 'Stredná',
@@ -50,6 +56,8 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     msaa: 0,
     particleDensity: 0.7,
     drawDistance: 650,
+    clouds: true,
+    mist: true,
   },
   high: {
     label: 'Vysoká',
@@ -64,6 +72,8 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     msaa: 4,
     particleDensity: 1,
     drawDistance: 900,
+    clouds: true,
+    mist: true,
   },
   ultra: {
     label: 'Ultra',
@@ -78,6 +88,8 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     msaa: 4,
     particleDensity: 1.25,
     drawDistance: 900,
+    clouds: true,
+    mist: true,
   },
 };
 

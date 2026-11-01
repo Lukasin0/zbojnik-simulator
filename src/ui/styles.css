@@ -571,6 +571,25 @@ textarea.save-code {
   background: #222;
 }
 
+.clock {
+  align-self: flex-end;
+  margin-top: -4px;
+  width: 170px;
+  text-align: center;
+  font-family: var(--display);
+  font-size: 15px;
+  color: #ffe6a8;
+  background: rgba(20, 14, 10, 0.75);
+  border: 1px solid var(--wood-edge);
+  border-radius: 12px;
+  padding: 3px 8px;
+  text-shadow: 0 1px 2px #000;
+}
+
+.clock.night {
+  color: #c8d6ff;
+}
+
 .minimap.big {
   width: min(70vh, 70vw);
   height: min(70vh, 70vw);
@@ -678,6 +697,31 @@ textarea.save-code {
 
 .crosshair.show {
   opacity: 0.85;
+}
+
+/* aiming: ring around the dot doubles as the reload indicator */
+.crosshair::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  opacity: 0;
+  transform: scale(1.6);
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
+  background: conic-gradient(var(--ink) var(--reload, 360deg), rgba(243, 234, 214, 0.18) 0);
+  -webkit-mask: radial-gradient(circle, transparent 10px, #000 11px);
+  mask: radial-gradient(circle, transparent 10px, #000 11px);
+}
+
+.crosshair.aim::before {
+  opacity: 0.9;
+  transform: scale(1);
+}
+
+.crosshair.aim.loading::before {
+  background: conic-gradient(var(--bad) var(--reload, 360deg), rgba(243, 234, 214, 0.18) 0);
 }
 
 .crosshair::after {

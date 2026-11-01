@@ -6,9 +6,9 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { DEFAULT_GRAPHICS, GAME_CONFIG } from '@/config/game-config';
 import { QUALITY_LEVELS, QUALITY_PRESETS, detectGpu, type GpuInfo, type QualityPreset } from '@/config/quality';
 import type { GraphicsSettings } from '@/types/game-types';
+import { SKY_RADIUS, SkyDome } from '@/world/sky';
 
 const GRAPHICS_KEY = 'zbojnik.graphics.v2';
-const SKY_RADIUS = 700;
 
 const GradeShader = {
   uniforms: {
@@ -43,13 +43,15 @@ export class App {
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
   readonly sun: THREE.DirectionalLight;
+  readonly hemi: THREE.HemisphereLight;
+  readonly sky = new SkyDome();
+  readonly fog: THREE.FogExp2;
   readonly graphics: GraphicsSettings;
   readonly gpu: GpuInfo;
   /** Called whenever the active preset changes (particles etc. read it). */
   onQualityChange: ((preset: QualityPreset) => void) | null = null;
   private readonly composer: EffectComposer;
   private readonly gradePass: ShaderPass;
-  private readonly sky: THREE.Mesh;
   private readonly fpsMeter: HTMLDivElement;
   private resizeTimer: number | null = null;
   private damageFlash = 0;
@@ -73,11 +75,12 @@ export class App {
 
     const C = GAME_CONFIG.camera;
     this.camera = new THREE.PerspectiveCamera(C.fov, 1, C.near, C.far);
-    this.scene.fog = new THREE.FogExp2(GAME_CONFIG.fog.color, GAME_CONFIG.fog.density);
+    this.fog = new THREE.FogExp2(GAME_CONFIG.fog.color, GAME_CONFIG.fog.density);
+    this.scene.fog = this.fog;
     this.scene.background = new THREE.Color(GAME_CONFIG.fog.color);
 
-    const hemi = new THREE.HemisphereLight(0xd0dce6, 0x5a6038, 1.6);
-    this.scene.add(hemi);
+    this.hemi = new THREE.HemisphereLight(0xd0dce6, 0x5a6038, 1.6);
+    this.scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight(0xffe2b8, 2.4);
     this.sun.castShadow = true;
     this.sun.shadow.camera.near = 1;
@@ -86,8 +89,7 @@ export class App {
     this.sun.shadow.normalBias = 0.04;
     this.scene.add(this.sun, this.sun.target);
 
-    this.sky = this.createSky();
-    this.scene.add(this.sky);
+    this.scene.add(this.sky.mesh);
 
     const target = new THREE.WebGLRenderTarget(1, 1, { samples: preset.msaa, type: THREE.HalfFloatType });
     this.composer = new EffectComposer(this.renderer, target);
@@ -107,38 +109,6 @@ export class App {
 
   get preset(): QualityPreset {
     return QUALITY_PRESETS[this.graphics.quality];
-  }
-
-  private createSky(): THREE.Mesh {
-    const geo = new THREE.SphereGeometry(SKY_RADIUS, 24, 12);
-    const mat = new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      depthWrite: false,
-      fog: false,
-      uniforms: {
-        top: { value: new THREE.Color(GAME_CONFIG.sky.top) },
-        horizon: { value: new THREE.Color(GAME_CONFIG.sky.horizon) },
-      },
-      vertexShader: /* glsl */ `
-        varying vec3 vPos;
-        void main() { vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
-      `,
-      fragmentShader: /* glsl */ `
-        uniform vec3 top;
-        uniform vec3 horizon;
-        varying vec3 vPos;
-        void main() {
-          float h = clamp(normalize(vPos).y * 2.2, 0.0, 1.0);
-          gl_FragColor = vec4(mix(horizon, top, h), 1.0);
-          #include <tonemapping_fragment>
-          #include <colorspace_fragment>
-        }
-      `,
-    });
-    const sky = new THREE.Mesh(geo, mat);
-    sky.frustumCulled = false;
-    sky.renderOrder = -1;
-    return sky;
   }
 
   private loadGraphics(): GraphicsSettings {
@@ -222,7 +192,8 @@ export class App {
     this.camera.far = p.drawDistance;
     this.camera.updateProjectionMatrix();
     // the sky dome must stay inside the far plane
-    this.sky.scale.setScalar(Math.min(1, (p.drawDistance * 0.9) / SKY_RADIUS));
+    this.sky.mesh.scale.setScalar(Math.min(1, (p.drawDistance * 0.9) / SKY_RADIUS));
+    this.sky.setClouds(p.clouds);
     this.fpsMeter.style.display = this.graphics.showFps ? 'block' : 'none';
     this.applyPixelRatio();
     this.onQualityChange?.(p);
@@ -289,15 +260,9 @@ export class App {
     this.damageFlash = Math.min(1, this.damageFlash + amount);
   }
 
-  /** Keep the shadow frustum centred on the action. */
-  followSun(target: THREE.Vector3): void {
-    this.sun.position.set(target.x + 35, target.y + 70, target.z + 45);
-    this.sun.target.position.copy(target);
-  }
-
   render(frameDt: number): void {
     this.updateDynamicResolution(frameDt);
-    this.sky.position.copy(this.camera.position);
+    this.sky.mesh.position.copy(this.camera.position);
     this.damageFlash = Math.max(0, this.damageFlash - frameDt * 1.8);
     if (this.preset.postProcessing) {
       this.gradePass.uniforms.uDamage.value = this.damageFlash;

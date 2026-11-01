@@ -30,7 +30,7 @@ export const QUEST_STEPS: QuestStepDef[] = [
     chapter: 1,
     text: 'Streľba: zostreľ terče kresadlovkou ({n}/3)',
     goal: 3,
-    hint: 'Pravé tlačidlo myši / F – výstrel (mieri sa na stred obrazovky)',
+    hint: 'Drž pravé tlačidlo myši (alebo F) – mieriš cez rameno, pusti – výstrel.',
   },
   { id: 'c1_zapas', chapter: 1, text: 'Zápasenie: prihovor sa Uhorčíkovi a polož ho na lopatky.' },
   {

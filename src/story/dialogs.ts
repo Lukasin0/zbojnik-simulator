@@ -87,7 +87,7 @@ function uhorcikDialog(game: Game): DialogNode {
       return t('Slamení páni ešte stoja. Seknúť ľavým tlačidlom myši – tak, ako by si sekal do pánskej pýchy.');
     case 'c1_strelba':
       return t(
-        'Teraz kresadlovka. Terče stoja na západnom svahu. Mier stredom obrazovky a stlač pravé tlačidlo. A pamätaj – kým nabiješ, pandúr ťa trikrát ovalí.',
+        'Teraz kresadlovka. Terče stoja na západnom svahu. Drž pravé tlačidlo, zamier krúžkom na terč a pusti. A pamätaj – kým nabiješ, pandúr ťa trikrát ovalí.',
       );
     case 'c1_zapas':
       return t('Tak, a teraz ja a ty. Zápas! Kto padne na chrbát, platí borovičku celej Rovnej hore.', [

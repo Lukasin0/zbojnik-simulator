@@ -11,6 +11,7 @@ interface DebugCommands {
   tp(place: keyof typeof LOC): string;
   heal(): string;
   look(yaw: number, pitch?: number): string;
+  time(hours: number, speed?: number): string;
   state(): unknown;
   pools(): unknown;
 }
@@ -87,6 +88,11 @@ export function installDebugTools(game: Game, loop: GameLoop): void {
       game.cameraCtl.pitch = pitch;
       return `camera yaw ${yaw}`;
     },
+    time(hours, speed) {
+      game.dayNight.setTime(hours);
+      if (speed !== undefined) game.dayNight.speed = speed;
+      return `čas ${game.dayNight.clock()}`;
+    },
     state() {
       return game.snapshot();
     },
@@ -94,5 +100,5 @@ export function installDebugTools(game: Game, loop: GameLoop): void {
       return { particles: game.particles.stats };
     },
   };
-  console.info('%cZbojník debug: F3 = overlay, window.zbojnik.{god, money, skip, coach, tp, heal, look, state, pools}', 'color:#d9b24a');
+  console.info('%cZbojník debug: F3 = overlay, window.zbojnik.{god, money, skip, coach, tp, heal, look, time, state, pools}', 'color:#d9b24a');
 }

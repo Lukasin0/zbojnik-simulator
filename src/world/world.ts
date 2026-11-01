@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { LOC, PLAY_RADIUS, WATER_LEVEL, WORLD_SIZE } from '@/config/constants';
 import type { GroundProvider } from '@/components/physics-body';
-import { fbm, mulberry32, randRange } from '@/utils/math-utils';
+import { fbm, mulberry32, randRange, smoothstep } from '@/utils/math-utils';
 import { bakeStatic, mat } from './materials';
+import { Mist } from './mist';
+import type { NightReceiver } from './day-night';
 import { Terrain, isMud, pathDistance, riverZ, roadZ } from './terrain';
 import {
   createBarrel,
@@ -61,7 +63,7 @@ interface Sheep {
 const CELL = 12;
 
 /** Builds and owns the static Liptov valley: terrain, river, forest, village, salaš, castle. */
-export class World implements GroundProvider {
+export class World implements GroundProvider, NightReceiver {
   readonly root = new THREE.Group();
   readonly terrain: Terrain;
   readonly dummies: TrainingDummy[] = [];
@@ -74,6 +76,12 @@ export class World implements GroundProvider {
   readonly fieldPos: THREE.Vector3;
   /** Meshes the third-person camera must stay in front of. */
   readonly occluders: THREE.Object3D[] = [];
+  readonly mist: Mist;
+  /** Lanterns & forge – brighter after dark. */
+  private readonly nightLights: { light: THREE.PointLight; base: number }[] = [];
+  /** Shared window-glass material of every house – glows warm at night. */
+  private readonly windowMaterial = mat(0x23262a);
+  private night = 0;
   private readonly colliders: Collider[] = [];
   private readonly grid = new Map<number, number[]>();
   private readonly sheep: Sheep[] = [];
@@ -111,6 +119,21 @@ export class World implements GroundProvider {
     this.addCircle(ax, az, 0.6);
     this.buildForest();
     this.buildRocks();
+    this.mist = new Mist((x, z) => this.groundHeight(x, z));
+    this.root.add(this.mist.root);
+    this.windowMaterial.emissive.set(0xffa040);
+    this.windowMaterial.emissiveIntensity = 0;
+  }
+
+  /** NightReceiver: windows light up, fires and lanterns get stronger. */
+  setNight(night: number): void {
+    this.night = night;
+    this.windowMaterial.emissiveIntensity = smoothstep(0.35, 0.85, night) * 2.2;
+    for (const l of this.nightLights) l.light.intensity = l.base * (0.5 + night * 1.6);
+  }
+
+  updateMist(time: number, amount: number, color: THREE.Color): void {
+    this.mist.update(time, amount, color);
   }
 
   ground(x: number, z: number): THREE.Vector3 {
@@ -280,9 +303,10 @@ export class World implements GroundProvider {
       this.place(createBarrel(), bx, bz, 0, 0, 0, 0);
       this.addCircle(bx, bz, 0.45);
     }
-    const lantern = new THREE.PointLight(0xffa860, 14, 14, 1.8);
+    const lantern = new THREE.PointLight(0xffa860, 14, 16, 1.8);
     lantern.position.set(LOC.krcma.x - 6.8, this.groundHeight(LOC.krcma.x - 7, LOC.krcma.z) + 3, LOC.krcma.z);
     this.root.add(lantern);
+    this.nightLights.push({ light: lantern, base: 14 });
 
     this.place(createChurch(), v.x, v.z - 30, 0, 7, 20);
     this.place(createWell(), v.x, v.z, 0, 2.2, 2.2);
@@ -291,6 +315,7 @@ export class World implements GroundProvider {
     const forgeLight = new THREE.PointLight(0xff6a20, 10, 9, 1.8);
     forgeLight.position.set(LOC.shop.x + 1.2, this.groundHeight(LOC.shop.x, LOC.shop.z) + 1.4, LOC.shop.z + 1.2);
     this.root.add(forgeLight);
+    this.nightLights.push({ light: forgeLight, base: 10 });
     this.addBox(LOC.shop.x + 1.2, LOC.shop.z + 1.2, 1.6, 1.4);
     this.place(createHut(), LOC.poor.x, LOC.poor.z + 3, Math.PI, 5, 4.2);
 
@@ -481,7 +506,7 @@ export class World implements GroundProvider {
   update(dt: number, time: number): void {
     for (const f of this.fires) {
       const flicker = 0.75 + Math.sin(time * 13 + f.pos.x) * 0.1 + Math.sin(time * 23.7) * 0.08 + Math.random() * 0.07;
-      f.light.intensity = f.base * flicker;
+      f.light.intensity = f.base * flicker * (0.6 + this.night * 1.4);
       f.flame.scale.set(f.size * (0.9 + flicker * 0.15), f.size * (0.8 + flicker * 0.3), f.size * (0.9 + flicker * 0.15));
       f.flame.rotation.y += dt * 2;
     }

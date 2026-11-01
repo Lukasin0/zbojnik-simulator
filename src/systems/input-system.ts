@@ -69,10 +69,13 @@ const DEADZONE = 0.18;
 export class InputSystem {
   private readonly keysDown = new Set<string>();
   private readonly keysPressed = new Set<string>();
+  private readonly keysReleased = new Set<string>();
   private readonly mouseDown = new Set<number>();
   private readonly mousePressed = new Set<number>();
+  private readonly mouseReleased = new Set<number>();
   private readonly padDown = new Set<number>();
   private readonly padPressed = new Set<number>();
+  private readonly padReleased = new Set<number>();
   private readonly padAxes = [0, 0, 0, 0];
   private mouseDX = 0;
   private mouseDY = 0;
@@ -107,7 +110,7 @@ export class InputSystem {
   };
 
   private onKeyUp = (e: KeyboardEvent): void => {
-    this.keysDown.delete(e.code);
+    if (this.keysDown.delete(e.code)) this.keysReleased.add(e.code);
   };
 
   private onBlur = (): void => {
@@ -126,7 +129,8 @@ export class InputSystem {
   };
 
   private onMouseUp = (e: MouseEvent): void => {
-    this.mouseDown.delete(e.button);
+    // only a press we registered counts as a release (not the click that grabbed the pointer)
+    if (this.mouseDown.delete(e.button)) this.mouseReleased.add(e.button);
   };
 
   private onMouseMove = (e: MouseEvent): void => {
@@ -177,7 +181,7 @@ export class InputSystem {
         this.lastPadUse = performance.now();
       }
       if (pressed) this.padDown.add(i);
-      else this.padDown.delete(i);
+      else if (this.padDown.delete(i)) this.padReleased.add(i);
     });
     for (let i = 0; i < 4; i++) {
       const v = pad.axes[i] ?? 0;
@@ -196,6 +200,12 @@ export class InputSystem {
     if (KEY_BINDINGS[action].some((k) => this.keysPressed.has(k))) return true;
     if (MOUSE_BINDINGS[action]?.some((b) => this.mousePressed.has(b))) return true;
     return PAD_BINDINGS[action]?.some((b) => this.padPressed.has(b)) ?? false;
+  }
+
+  justReleased(action: Action): boolean {
+    if (KEY_BINDINGS[action].some((k) => this.keysReleased.has(k))) return true;
+    if (MOUSE_BINDINGS[action]?.some((b) => this.mouseReleased.has(b))) return true;
+    return PAD_BINDINGS[action]?.some((b) => this.padReleased.has(b)) ?? false;
   }
 
   /** Raw key edge for minigames (`KeyD`, `Space`…). */
@@ -238,7 +248,10 @@ export class InputSystem {
   /** Clear edge-triggered state after a simulation tick consumed it. */
   endTick(): void {
     this.keysPressed.clear();
+    this.keysReleased.clear();
     this.mousePressed.clear();
+    this.mouseReleased.clear();
     this.padPressed.clear();
+    this.padReleased.clear();
   }
 }

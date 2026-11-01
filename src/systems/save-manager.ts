@@ -19,6 +19,8 @@ export function createNewSave(): SaveData {
     companions: [],
     flags: {},
     stats: { coachesRobbed: 0, pandursBeaten: 0, givenToPoor: 0, playTime: 0 },
+    // start at dawn so the valley mist is visible right away
+    timeOfDay: 7.2,
   };
 }
 
@@ -101,6 +103,7 @@ function migrate(raw: Record<string, unknown>): SaveData {
       givenToPoor: num(stats.givenToPoor, 0),
       playTime: num(stats.playTime, 0),
     },
+    timeOfDay: Math.min(24, Math.max(0, num(raw.timeOfDay, 9))),
   };
 }
 

@@ -27,6 +27,9 @@ export interface HudState {
   objective: string;
   hint: string;
   crosshair: boolean;
+  aiming: boolean;
+  /** 0..1 musket reload progress */
+  reload: number;
   buff: string;
   clickHint: boolean;
 }
@@ -69,6 +72,7 @@ export class Hud {
   private readonly objective: HTMLDivElement;
   private readonly minimap: HTMLCanvasElement;
   private readonly mapCtx: CanvasRenderingContext2D | null;
+  private readonly clock: HTMLDivElement;
   private readonly hotbar: HTMLDivElement;
   private readonly ingredients: HTMLDivElement;
   private readonly prompt: HTMLDivElement;
@@ -109,7 +113,8 @@ export class Hud {
     this.minimap.width = 340;
     this.minimap.height = 340;
     this.mapCtx = this.minimap.getContext('2d');
-    tr.append(this.objective, this.minimap);
+    this.clock = el('div', 'clock');
+    tr.append(this.objective, this.minimap, this.clock);
 
     this.hotbar = el('div', 'hotbar');
     this.ingredients = el('div', 'ingredients');
@@ -198,8 +203,18 @@ export class Hud {
           ? `Na halušky: ${ICONS.zemiaky} ${s.inventory.zemiaky}  ${ICONS.bryndza} ${s.inventory.bryndza}  ${ICONS.slanina} ${s.inventory.slanina}`
           : '';
     }
-    this.crosshair.classList.toggle('show', s.crosshair);
+    this.crosshair.classList.toggle('show', s.crosshair || s.aiming);
+    this.crosshair.classList.toggle('aim', s.aiming);
+    this.crosshair.classList.toggle('loading', s.reload < 1);
+    this.crosshair.style.setProperty('--reload', `${Math.round(s.reload * 360)}deg`);
     this.clickHint.classList.toggle('show', s.clickHint);
+  }
+
+  setClock(text: string, night: boolean): void {
+    if (this.changed('clock', `${text}|${night}`)) {
+      this.clock.textContent = `${night ? '☾' : '☀'} ${text}`;
+      this.clock.classList.toggle('night', night);
+    }
   }
 
   setPrompt(text: string | null): void {

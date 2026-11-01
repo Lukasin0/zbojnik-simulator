@@ -8,6 +8,9 @@ export interface PlayerIntent {
   sprint: boolean;
   jump: boolean;
   attack: boolean;
+  /** Shoot button held – aiming over the shoulder. */
+  aim: boolean;
+  /** Shoot button released – fire. */
   shoot: boolean;
   aimYaw: number;
 }
@@ -18,7 +21,17 @@ export class PlayerInputHandler {
 
   read(cameraYaw: number, enabled: boolean): PlayerIntent {
     if (!enabled) {
-      return { moveX: 0, moveZ: 0, magnitude: 0, sprint: false, jump: false, attack: false, shoot: false, aimYaw: cameraYaw };
+      return {
+        moveX: 0,
+        moveZ: 0,
+        magnitude: 0,
+        sprint: false,
+        jump: false,
+        attack: false,
+        aim: false,
+        shoot: false,
+        aimYaw: cameraYaw,
+      };
     }
     const axis = this.input.moveAxis();
     const fx = Math.sin(cameraYaw);
@@ -36,7 +49,8 @@ export class PlayerInputHandler {
       sprint: this.input.isDown('sprint'),
       jump: this.input.justPressed('jump'),
       attack: this.input.justPressed('attack'),
-      shoot: this.input.justPressed('shoot'),
+      aim: this.input.isDown('shoot'),
+      shoot: this.input.justReleased('shoot'),
       aimYaw: cameraYaw,
     };
   }

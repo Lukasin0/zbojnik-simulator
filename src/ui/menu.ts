@@ -56,7 +56,7 @@ export function createControlsPanel(onClose: () => void): HTMLDivElement {
       <kbd>Shift</kbd><span>šprint (míňa silu)</span>
       <kbd>Medzerník</kbd><span>skok – so šprintom zbojnícky výskok</span>
       <kbd>Ľavé tl. / J</kbd><span>sek valaškou</span>
-      <kbd>Pravé tl. / F</kbd><span>výstrel z kresadlovky</span>
+      <kbd>Pravé tl. / F</kbd><span>drž = mierenie cez rameno, pusti = výstrel z kresadlovky</span>
       <kbd>E</kbd><span>hovoriť / použiť</span>
       <kbd>G</kbd><span>zahrať na fujare (ráž, uspávanie pandúrov)</span>
       <kbd>1 – 4</kbd><span>slanina, parenica, halušky, borovička</span>

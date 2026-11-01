@@ -22,7 +22,7 @@ Navyše: bryndzové halušky, kováč (širší opasok, klobúk s pierkom, krpce
 | W A S D + myš | pohyb a kamera (klikni do hry) |
 | Shift / Medzerník | šprint / skok |
 | Ľavé tlačidlo / J | sek valaškou |
-| Pravé tlačidlo / F | výstrel |
+| Pravé tlačidlo / F | drž = mierenie, pusti = výstrel |
 | E | hovoriť / použiť |
 | G | fujara |
 | 1–4 | jedlo a pitie |

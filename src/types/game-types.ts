@@ -79,6 +79,8 @@ export interface SaveData {
   companions: CompanionId[];
   flags: Record<string, boolean>;
   stats: GameStats;
+  /** In-game hour 0..24 */
+  timeOfDay: number;
 }
 
 export interface AudioSettings {

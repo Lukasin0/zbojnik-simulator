@@ -20,6 +20,7 @@ export interface PlayerHooks {
   onJump(p: Player): void;
   onHurt(p: Player, amount: number): void;
   onNoStamina(): void;
+  onReloading(): void;
 }
 
 /** Juraj Jánošík – controlled by the player. */
@@ -31,6 +32,8 @@ export class Player extends Actor {
   raz = 10;
   godMode = false;
   sprinting = false;
+  /** Holding the shoot button – the camera goes over the shoulder. */
+  aiming = false;
   krpce = false;
   damageBonus = 0;
   private hitDone = false;
@@ -55,6 +58,7 @@ export class Player extends Actor {
   update(dt: number, intent: PlayerIntent, world: PlayerWorld, hooks: PlayerHooks): void {
     this.beginTick();
     if (!this.isAlive()) {
+      this.aiming = false;
       this.body.steer(0, 0, 8, dt);
       this.body.integrate(dt, world);
       return;
@@ -70,9 +74,14 @@ export class Player extends Actor {
     if (world.waterDepth(p.x, p.z) > 0.3) speedMul *= T.waterSlow;
     if (this.krpce) speedMul *= 1.08;
     if (this.attacking) speedMul *= 0.45;
+    this.aiming = intent.aim && !this.attacking;
+    if (this.aiming) {
+      speedMul *= 0.5;
+      this.aimHold = Math.max(this.aimHold, 0.15);
+    }
 
     const moving = intent.magnitude > 0.1;
-    this.sprinting = intent.sprint && moving && this.stamina > 1 && !this.attacking;
+    this.sprinting = intent.sprint && moving && this.stamina > 1 && !this.attacking && !this.aiming;
     if (this.sprinting) {
       this.stamina = Math.max(0, this.stamina - T.sprintCost * dt);
       this.staminaDelay = T.staminaRegenDelay;
@@ -116,11 +125,15 @@ export class Player extends Actor {
       if (this.attackT >= 1) this.attackT = -1;
     }
 
-    if (intent.shoot && this.shootCd.ready && !this.attacking) {
-      this.shootCd.trigger();
-      this.facing = intent.aimYaw;
-      this.aimHold = 0.45;
-      hooks.onShoot(this);
+    if (intent.shoot && !this.attacking) {
+      if (this.shootCd.ready) {
+        this.shootCd.trigger();
+        this.facing = intent.aimYaw;
+        this.aimHold = 0.45;
+        hooks.onShoot(this);
+      } else {
+        hooks.onReloading();
+      }
     }
     this.aimHold = Math.max(0, this.aimHold - dt);
     this.aimT = damp(this.aimT, this.aimHold > 0 ? 1 : 0, 18, dt);
