@@ -295,6 +295,31 @@ export const HANA_THANKS: readonly string[] = [
   'Ty si… ty si on, však? Nič nehovor. Ja som nič nevidela, len dobrého človeka.',
 ];
 
+// ---------------------------------------------------------------- Jánošíkove diery
+
+export const BEAR_ROAR: readonly string[] = ['GRRRAAAUU!', 'Mrrrmf… GRRRR!', 'HRRRAAAU! (preklad: „Moja jaskyňa!“)'];
+
+export const BEAR_HIT: readonly string[] = ['Grrf!', 'Mrau?!', 'HRRR!'];
+
+export const BEAR_CREW: readonly string[] = [
+  'Kapitán, ten medveď má väčší opasok ako ty!',
+  'Ja ho držím! …Nie, on drží mňa!',
+  'Dunčo, nehnevaj sa, my sme len prišli na návštevu!',
+  'Keď ho porazíme, bude z neho pekná predložka. …Žartujem, Dunčo, žartujem!',
+];
+
+export const ONDRAS_TALK: readonly string[] = [
+  'Drevo rúbem štyridsať rokov. Stromy sa ešte ani raz nesťažovali. Na rozdiel od pánov.',
+  'Tu hore je ticho. Iba vodopády, vietor a raz za čas medveď, čo si spieva.',
+  'Kto sa v diery stratí, toho nájdu až na jar. Teda, ak ho nájdu medvede skôr.',
+];
+
+export const HIDEOUT_TALK: readonly string[] = [
+  'Kapitán, tu nás nenájde ani vrana, nieto pandúr.',
+  'Konečne strecha nad hlavou. Skalná, ale naša.',
+  'Ešte keby tu bol šenk… Gajdošík, nepozeraj tak na mňa.',
+];
+
 export const HOUR_NAMES = [
   'polnoc', 'jedna', 'druhá', 'tretia', 'štvrtá', 'piata', 'šiesta', 'siedma', 'ôsma', 'deviata', 'desiata', 'jedenásta',
 ] as const;

@@ -286,6 +286,26 @@ export const HANA: CharacterLook = {
   height: 0.94,
 };
 
+/** Drevorubač Ondráš – lives in the woods above Terchová, axe always at hand. */
+export const DREVORUBAC: CharacterLook = {
+  skin: 0xc48e6c,
+  hair: 0x8a5a32,
+  shirt: 0xd8ccb0,
+  pants: 0x4a3a2a,
+  shoes: 0x3a2418,
+  socks: [0x3a2a1c, 0xd8ccb0],
+  vest: 0x3a4a2a,
+  belt: COLORS.leather,
+  beltLevel: 1,
+  hat: 'bacov',
+  hatColor: 0x3a3028,
+  beard: 0x8a5a32,
+  mustache: true,
+  weapon: 'valaska',
+  girth: 1.2,
+  height: 1.05,
+};
+
 /** Handlársky kabát – what Jánošík wears to sneak into town. */
 export const DISGUISE = {
   coat: 0x6a5640,

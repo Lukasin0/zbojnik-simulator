@@ -1,14 +1,18 @@
 import * as THREE from 'three';
-import { BOUNDS_MARGIN, LOC, REGIONS, WATER_LEVEL, WORLD_SIZE } from '@/config/constants';
+import { BOUNDS_MARGIN, BROKEN_LADDER, GORGE, GORGE_STEPS, LOC, REGIONS, WATER_LEVEL, WORLD_SIZE } from '@/config/constants';
 import type { GroundProvider } from '@/components/physics-body';
-import { fbm, mulberry32, randRange, smoothstep } from '@/utils/math-utils';
+import { fbm, lerp, mulberry32, randRange, smoothstep } from '@/utils/math-utils';
 import { bakeStatic, mat } from './materials';
 import { Mist } from './mist';
 import type { NightReceiver } from './day-night';
-import { Terrain, isMud, outsideDistance, pathDistance, riverZ, roadZ } from './terrain';
+import { Terrain, gorgeAt, gorgeFloor, isMud, outsideDistance, pathDistance, riverZ, roadZ } from './terrain';
 import {
   createBarrel,
+  createBedding,
   createBench,
+  createCaveMouth,
+  createLadder,
+  createLeanTo,
   createCastle,
   createChest,
   createChurch,
@@ -65,6 +69,51 @@ interface Sheep {
   wait: number;
 }
 
+export interface Ladder {
+  index: number;
+  /** where you stand to climb up / where you arrive climbing down */
+  bottom: THREE.Vector3;
+  top: THREE.Vector3;
+  /** facing the rock while climbing */
+  yaw: number;
+  fixed: THREE.Group;
+  /** the broken ladder shown until it is mended (null = usable) */
+  broken: THREE.Group | null;
+}
+
+export interface Hideout {
+  fire: Fire | null;
+  firePos: THREE.Vector3;
+  beds: THREE.Group | null;
+  bedsPos: THREE.Vector3;
+  table: THREE.Group | null;
+  tablePos: THREE.Vector3;
+  chest: THREE.Group | null;
+  chestPos: THREE.Vector3;
+  bearPos: THREE.Vector3;
+}
+
+/** Foamy stripes for the gorge brook (scrolled every frame). */
+function streamTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 32;
+  c.height = 64;
+  const g = c.getContext('2d');
+  if (g) {
+    g.fillStyle = '#5f8fa8';
+    g.fillRect(0, 0, 32, 64);
+    for (let i = 0; i < 26; i++) {
+      g.fillStyle = `rgba(235,245,250,${0.25 + Math.random() * 0.45})`;
+      g.fillRect(Math.random() * 32, Math.random() * 64, 2 + Math.random() * 6, 3 + Math.random() * 9);
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 const CELL = 12;
 
 /** Builds and owns the static Liptov valley: terrain, river, forest, village, salaš, castle. */
@@ -87,6 +136,24 @@ export class World implements GroundProvider, NightReceiver {
   /** Where the Mikuláš market vendors stand – behind their stalls. */
   readonly stalls: THREE.Vector3[] = [];
   posterPos = new THREE.Vector3();
+  /** Jánošíkove diery */
+  readonly ladders: Ladder[] = [];
+  readonly waterfalls: THREE.Vector3[] = [];
+  /** Zbojnícke chodníky – fast-travel signposts by place id. */
+  readonly signposts: Record<string, THREE.Vector3> = {};
+  ondrasPos = new THREE.Vector3();
+  readonly hideout: Hideout = {
+    fire: null,
+    firePos: new THREE.Vector3(),
+    beds: null,
+    bedsPos: new THREE.Vector3(),
+    table: null,
+    tablePos: new THREE.Vector3(),
+    chest: null,
+    chestPos: new THREE.Vector3(),
+    bearPos: new THREE.Vector3(),
+  };
+  private streamTexture: THREE.Texture | null = null;
   /** Lanterns & forge – brighter after dark. */
   private readonly nightLights: { light: THREE.PointLight; base: number }[] = [];
   /** Shared window-glass material of every house – glows warm at night. */
@@ -123,6 +190,7 @@ export class World implements GroundProvider, NightReceiver {
     this.buildTerchova();
     this.buildCastle();
     this.buildMikulas();
+    this.buildGorge();
     this.buildRoadside();
     const ax = LOC.ambushX;
     const az = roadZ(ax) - 5.5;
@@ -242,8 +310,11 @@ export class World implements GroundProvider, NightReceiver {
     return hit;
   }
 
-  /** Keeps actors inside the union of region discs (plus the slope margin). */
+  /** Keeps actors inside the union of region discs (plus the slope margin) or the gorge floor. */
   clampToBounds(p: THREE.Vector3): void {
+    const g = gorgeAt(p.x, p.z);
+    const gorgeOver = g.dist - g.r;
+    if (gorgeOver <= 0) return;
     let best: (typeof REGIONS)[number] | null = null;
     let bestOver = Infinity;
     for (const r of REGIONS) {
@@ -253,6 +324,13 @@ export class World implements GroundProvider, NightReceiver {
         bestOver = over;
         best = r;
       }
+    }
+    if (gorgeOver < bestOver) {
+      // back onto the gorge floor
+      const k = g.r / g.dist;
+      p.x = g.x + (p.x - g.x) * k;
+      p.z = g.z + (p.z - g.z) * k;
+      return;
     }
     if (!best) return;
     const dx = p.x - best.x;
@@ -500,6 +578,209 @@ export class World implements GroundProvider, NightReceiver {
     this.doors.hana = this.doorOf(h.x, h.z, 0, 4.2);
   }
 
+  /** Jánošíkove diery: ladders over the rock steps, the stream, Ondráš's camp and the hideout. */
+  private buildGorge(): void {
+    GORGE_STEPS.forEach((seg, i) => {
+      const a = GORGE[seg];
+      const b = GORGE[seg + 1];
+      const len = Math.hypot(b.x - a.x, b.z - a.z);
+      const dx = (b.x - a.x) / len;
+      const dz = (b.z - a.z) / len;
+      const mx = (a.x + b.x) / 2;
+      const mz = (a.z + b.z) / 2;
+      const low = gorgeFloor(seg, 0);
+      const high = gorgeFloor(seg, 1);
+      // ladder leans against the step on the other side than the waterfall
+      const side = 1.6;
+      const px = -dz * side;
+      const pz = dx * side;
+      const yaw = Math.atan2(-dx, -dz);
+      const lean = Math.atan2(2.4, high - low);
+      const length = (high - low) / Math.cos(lean) + 1.2;
+      const bx = mx - dx * 1.4 + px;
+      const bz = mz - dz * 1.4 + pz;
+      const ladder = this.placeFree(createLadder(length, lean), bx, bz, yaw);
+      const ladderInfo: Ladder = {
+        index: i,
+        bottom: this.ground(mx - dx * 2.6 + px, mz - dz * 2.6 + pz),
+        top: this.ground(mx + dx * 2.2 + px, mz + dz * 2.2 + pz),
+        yaw: Math.atan2(dx, dz),
+        fixed: ladder,
+        broken: null,
+      };
+      if (i === BROKEN_LADDER) {
+        ladderInfo.broken = this.placeFree(createLadder(length, lean, true), bx, bz, yaw);
+        ladder.visible = false;
+      }
+      this.ladders.push(ladderInfo);
+      // the rock step itself cannot be walked up – a row of boulders' worth of colliders
+      const r = (a.r + b.r) / 2 + 1.5;
+      for (let s = -r; s <= r; s += 0.9) this.addCircle(mx - dz * s, mz + dx * s, 0.7);
+      const fall = ((a.r + b.r) / 2) * 0.5;
+      this.waterfalls.push(this.ground(mx - dx * 1.6 + dz * fall, mz - dz * 1.6 - dx * fall));
+    });
+    this.buildStream();
+
+    // Dolné diery – Ondráš's camp
+    const n1 = GORGE[1];
+    const n2 = GORGE[2];
+    const cl = Math.hypot(n2.x - n1.x, n2.z - n1.z);
+    const cdx = (n2.x - n1.x) / cl;
+    const cdz = (n2.z - n1.z) / cl;
+    this.placeFree(createLeanTo(), n2.x + cdz * 5, n2.z - cdx * 5, Math.atan2(-cdz, cdx));
+    this.ondrasPos = this.ground(n2.x + cdz * 2, n2.z - cdx * 2);
+    this.signposts.diery = this.ground(n2.x - cdx * 6 - cdz * 3, n2.z - cdz * 6 + cdx * 3);
+
+    // Horné diery – the hideout under the overhang
+    const n7 = GORGE[GORGE.length - 2];
+    const n8 = GORGE[GORGE.length - 1];
+    const hl = Math.hypot(n8.x - n7.x, n8.z - n7.z);
+    const dx = (n8.x - n7.x) / hl;
+    const dz = (n8.z - n7.z) / hl;
+    const at2 = (fwd: number, side: number): THREE.Vector3 => this.ground(n8.x + dx * fwd - dz * side, n8.z + dz * fwd + dx * side);
+    const face = Math.atan2(-dx, -dz);
+    const cave = at2(13.2, 0);
+    this.placeFree(createCaveMouth(), cave.x, cave.z, face);
+    const slab = new THREE.Mesh(new THREE.DodecahedronGeometry(1, 0), mat(0x5f5b55));
+    const so = at2(10.5, 0);
+    slab.position.set(so.x, so.y + 6.4, so.z);
+    slab.scale.set(8.5, 1.4, 5.5);
+    slab.rotation.y = face;
+    slab.castShadow = true;
+    this.root.add(slab);
+    const fire = at2(3.5, 0);
+    this.hideout.firePos.copy(fire);
+    this.place(createVatraPile(), fire.x, fire.z, 0, 0, 0, 0).scale.setScalar(0.6);
+    this.addFire(new THREE.Vector3(fire.x, fire.y + 0.1, fire.z), 0.55, 0);
+    this.hideout.fire = this.fires[this.fires.length - 1];
+    this.hideout.fire.flame.visible = false;
+    const bedPos = at2(7.5, -5);
+    this.hideout.beds = this.placeFree(createBedding(), bedPos.x, bedPos.z, face + Math.PI / 2);
+    this.hideout.bedsPos.copy(bedPos);
+    const tablePos = at2(6.5, 5);
+    const table = new THREE.Group();
+    table.add(createTable());
+    const b1 = createBench(2.0);
+    b1.position.z = -1.0;
+    const b2 = createBench(2.0);
+    b2.position.z = 1.0;
+    table.add(b1, b2);
+    this.hideout.table = this.placeFree(table, tablePos.x, tablePos.z, face);
+    this.hideout.tablePos.copy(tablePos);
+    const chest = at2(11, 3.2);
+    this.hideout.chest = this.placeFree(createChest(), chest.x, chest.z, face);
+    this.hideout.chestPos.copy(chest);
+    this.hideout.bearPos.copy(at2(9, -1));
+    for (const g of [this.hideout.beds, this.hideout.table, this.hideout.chest]) g.visible = false;
+    this.signposts.ukryt = at2(-7, 4);
+
+    // zbojnícke chodníky – signposts all over Liptov
+    this.signposts.vatra = this.ground(LOC.vatra.x + 10, LOC.vatra.z + 12);
+    this.signposts.dedina = this.ground(LOC.village.x + 5, LOC.village.z + 7);
+    this.signposts.terchova = this.ground(LOC.terchova.x - 7, LOC.terchova.z + 10);
+    this.signposts.mikulas = this.ground(LOC.hana.x + 7, LOC.hana.z + 7);
+    for (const p of Object.values(this.signposts)) {
+      const s = createSign('CHODNÍK');
+      s.scale.setScalar(0.8);
+      s.position.copy(p);
+      s.rotation.y = Math.atan2(LOC.village.x - p.x, LOC.village.z - p.z);
+      this.root.add(s);
+    }
+  }
+
+  /** The brook down the gorge – a ribbon over the floor that turns into waterfalls at the steps. */
+  private buildStream(): void {
+    const pts: { x: number; z: number; px: number; pz: number }[] = [];
+    for (let i = GORGE.length - 2; i >= 0; i--) {
+      const a = GORGE[i + 1];
+      const b = GORGE[i];
+      const len = Math.hypot(b.x - a.x, b.z - a.z);
+      const dx = (b.x - a.x) / len;
+      const dz = (b.z - a.z) / len;
+      const steps = Math.ceil(len / 1.2);
+      for (let k = i === GORGE.length - 2 ? 0 : 1; k <= steps; k++) {
+        const t = k / steps;
+        const side = -lerp(a.r, b.r, t) * 0.5;
+        pts.push({ x: a.x + (b.x - a.x) * t + dz * side, z: a.z + (b.z - a.z) * t - dx * side, px: dz, pz: -dx });
+      }
+    }
+    const pos: number[] = [];
+    const uv: number[] = [];
+    const col: number[] = [];
+    const idx: number[] = [];
+    let along = 0;
+    pts.forEach((p, i) => {
+      const y = this.groundHeight(p.x, p.z) + 0.08;
+      if (i > 0) along += Math.hypot(p.x - pts[i - 1].x, p.z - pts[i - 1].z);
+      const next = pts[Math.min(pts.length - 1, i + 1)];
+      const prev = pts[Math.max(0, i - 1)];
+      const steep = Math.min(1, Math.abs(this.groundHeight(next.x, next.z) - this.groundHeight(prev.x, prev.z)) / 3);
+      for (const s of [-0.7, 0.7]) {
+        pos.push(p.x + p.px * s, y + steep * 0.3, p.z + p.pz * s);
+        uv.push(s > 0 ? 1 : 0, along / 3);
+        const c = 0.55 + steep * 0.45;
+        col.push(c, c + 0.05, c + 0.08);
+      }
+      if (i > 0) {
+        const v = i * 2;
+        idx.push(v - 2, v - 1, v, v - 1, v + 1, v);
+      }
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    this.streamTexture = streamTexture();
+    const mesh = new THREE.Mesh(
+      geo,
+      new THREE.MeshStandardMaterial({
+        map: this.streamTexture,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.88,
+        roughness: 0.2,
+        side: THREE.DoubleSide,
+      }),
+    );
+    mesh.renderOrder = 1;
+    this.root.add(mesh);
+  }
+
+  /** Place a prop at any angle without baking (so it can be shown / hidden later). */
+  private placeFree(group: THREE.Group, x: number, z: number, rot: number): THREE.Group {
+    group.position.set(x, this.groundHeight(x, z), z);
+    group.rotation.y = rot;
+    group.traverse((o) => {
+      o.castShadow = true;
+      o.receiveShadow = true;
+    });
+    this.root.add(group);
+    return group;
+  }
+
+  /** Mend the broken ladder (chapter 5). */
+  repairLadder(index: number): void {
+    const l = this.ladders[index];
+    if (!l?.broken) return;
+    l.broken.visible = false;
+    l.fixed.visible = true;
+    l.broken = null;
+  }
+
+  /** Show what has been built in the hideout. */
+  setHideout(fire: boolean, beds: boolean, table: boolean, chest: boolean): void {
+    const h = this.hideout;
+    if (h.fire) {
+      h.fire.base = fire ? 20 : 0;
+      h.fire.flame.visible = fire;
+    }
+    if (h.beds) h.beds.visible = beds;
+    if (h.table) h.table.visible = table;
+    if (h.chest) h.chest.visible = chest;
+  }
+
   private buildCastle(): void {
     const c = LOC.castle;
     this.place(createCastle(), c.x, c.z, 0, 17, 15, 0.5);
@@ -517,6 +798,8 @@ export class World implements GroundProvider, NightReceiver {
   }
 
   private blockedForTrees(x: number, z: number): boolean {
+    const g = gorgeAt(x, z);
+    if (g.dist < g.r + 4) return true;
     if (Math.abs(z - roadZ(x)) < 9) return true;
     if (Math.abs(z - riverZ(x)) < 15) return true;
     if (pathDistance(x, z) < 3) return true;
@@ -634,5 +917,6 @@ export class World implements GroundProvider, NightReceiver {
       pos.setZ(i, Math.sin(time * 1.3 + pos.getX(i) * 0.15 + pos.getY(i) * 0.3) * 0.06);
     }
     pos.needsUpdate = true;
+    if (this.streamTexture) this.streamTexture.offset.y = time * 0.9;
   }
 }

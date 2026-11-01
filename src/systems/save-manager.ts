@@ -2,7 +2,7 @@ import { ECONOMY, LOC } from '@/config/constants';
 import type { CompanionId, ItemId, QuestStepId, SaveData } from '@/types/game-types';
 
 const SAVE_KEY = 'zbojnik.save';
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export function createNewSave(): SaveData {
   return {
@@ -44,6 +44,12 @@ const QUEST_IDS: readonly QuestStepId[] = [
   'c4_vreckuj',
   'c4_utek',
   'c4_rozdel',
+  'c5_jan',
+  'c5_ondras',
+  'c5_vystup',
+  'c5_medved',
+  'c5_zariad',
+  'c5_hostina',
   'free',
 ];
 const COMPANION_IDS: readonly CompanionId[] = ['uhorcik', 'ilcik', 'gajdosik'];
@@ -58,8 +64,8 @@ function num(v: unknown, fallback: number): number {
 
 /**
  * Versioned migration. v1 saves (early prototype) stored `money` instead of
- * `dukaty` and had no stash / equipment. v2 saves that already reached free play
- * continue with chapter 4 (the Mikuláš fair).
+ * `dukaty` and had no stash / equipment. v2 / v3 saves that already reached free play
+ * continue with the chapter that was added after them (4 = Mikuláš fair, 5 = Jánošíkove diery).
  */
 function migrate(raw: Record<string, unknown>): SaveData {
   const base = createNewSave();
@@ -67,6 +73,9 @@ function migrate(raw: Record<string, unknown>): SaveData {
   if (version < 2 && 'money' in raw) raw.dukaty = raw.money;
   if (version < 3 && raw.questStep === 'free') {
     raw.questStep = 'c4_tip';
+    raw.questCounter = 0;
+  } else if (version < 4 && raw.questStep === 'free') {
+    raw.questStep = 'c5_jan';
     raw.questCounter = 0;
   }
 

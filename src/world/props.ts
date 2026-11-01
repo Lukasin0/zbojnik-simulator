@@ -279,6 +279,82 @@ export function createPillory(): THREE.Group {
   return g;
 }
 
+// --------------------------------------------------------------------------- Jánošíkove diery
+
+/** Wooden ladder along local +Y, leaning back (towards -Z) by `lean`. `broken` drops two rungs. */
+export function createLadder(length: number, lean: number, broken = false): THREE.Group {
+  const g = new THREE.Group();
+  const inner = new THREE.Group();
+  inner.rotation.x = -lean;
+  g.add(inner);
+  for (const x of [-0.32, 0.32]) {
+    const rail = part(new THREE.BoxGeometry(0.09, broken && x > 0 ? length * 0.55 : length, 0.09), WOOD);
+    rail.position.set(x, broken && x > 0 ? length * 0.275 : length / 2, 0);
+    inner.add(rail);
+  }
+  const rungs: THREE.BufferGeometry[] = [];
+  for (let y = 0.3; y < length - 0.1; y += 0.42) {
+    if (broken && y > length * 0.35 && y < length * 0.75) continue;
+    rungs.push(new THREE.BoxGeometry(0.66, 0.06, 0.07).translate(0, y, 0));
+  }
+  const merged = mergeGeometries(rungs.map((x) => x.toNonIndexed()), false);
+  if (merged) inner.add(part(merged, WOOD_DARK));
+  return g;
+}
+
+/** Drevorubač's lean-to: a slanted bark roof on two posts with a log pile. */
+export function createLeanTo(): THREE.Group {
+  const g = new THREE.Group();
+  for (const x of [-1.6, 1.6]) g.add(at(part(new THREE.BoxGeometry(0.14, 2.2, 0.14), WOOD_DARK), x, 1.1, 0.9));
+  g.add(at(part(new THREE.BoxGeometry(3.8, 0.12, 2.6), 0x5a4632), 0, 1.45, 0, -0.55, 0, 0));
+  const logs: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 6; i++) {
+    const row = i < 3 ? 0 : 1;
+    const x = (i % 3) * 0.32 - 0.32 + row * 0.16;
+    logs.push(new THREE.CylinderGeometry(0.15, 0.15, 1.8, 7).rotateZ(Math.PI / 2).translate(0, 0.15 + row * 0.27, x));
+  }
+  const pile = mergeGeometries(logs.map((x) => x.toNonIndexed()), false);
+  if (pile) g.add(at(part(pile, 0x7a5232), 2.8, 0, 0.6));
+  // stump with the axe stuck in it
+  g.add(at(part(new THREE.CylinderGeometry(0.35, 0.4, 0.55, 8), 0x6a4a2a), -2.6, 0.27, 1.6));
+  g.add(at(part(new THREE.BoxGeometry(0.05, 0.75, 0.05), WOOD), -2.6, 0.85, 1.6, 0, 0, 0.5));
+  g.add(at(part(new THREE.BoxGeometry(0.04, 0.16, 0.22), 0xb9bec4, { metalness: 0.7, roughness: 0.4 }), -2.45, 0.6, 1.6, 0, 0, 0.5));
+  return g;
+}
+
+/** A dark cave mouth framed by boulders. Opens towards +Z. */
+export function createCaveMouth(): THREE.Group {
+  const g = new THREE.Group();
+  g.add(at(part(new THREE.BoxGeometry(4.6, 3.6, 0.3), 0x0a0908), 0, 1.6, 0));
+  const rocks: [number, number, number, number][] = [
+    [-2.7, 1.2, 0.4, 1.5],
+    [2.7, 1.3, 0.4, 1.6],
+    [-1.4, 3.6, 0.5, 1.4],
+    [1.2, 3.7, 0.4, 1.5],
+    [0, 4.2, 0.2, 1.3],
+  ];
+  for (const [x, y, z, s] of rocks) {
+    const m = part(new THREE.DodecahedronGeometry(s, 0), 0x6f6b64);
+    m.position.set(x, y, z);
+    m.scale.set(1, 1.1, 0.8);
+    g.add(m);
+  }
+  return g;
+}
+
+/** Bed of spruce boughs (čečina) with a rolled sheepskin. */
+export function createBedding(): THREE.Group {
+  const g = new THREE.Group();
+  for (const [x, r] of [
+    [-0.9, 0.1],
+    [0.9, -0.15],
+  ]) {
+    g.add(at(part(new THREE.BoxGeometry(1.0, 0.22, 2.1), 0x2f4f2a), x, 0.11, 0, 0, r, 0));
+    g.add(at(part(new THREE.CylinderGeometry(0.2, 0.2, 0.9, 7), 0xe8e0cc), x, 0.3, -0.8, 0, r + Math.PI / 2, Math.PI / 2));
+  }
+  return g;
+}
+
 export function createKoliba(): THREE.Group {
   return createHouse({ w: 6, d: 5, h: 2.3, roofH: 3.2, roof: 0x55452f, chimney: true });
 }

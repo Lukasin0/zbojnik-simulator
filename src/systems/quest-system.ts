@@ -14,7 +14,8 @@ export const CHAPTER_TITLES: Record<number, string> = {
   2: 'Felláci z Liptova',
   3: 'Prepad panského koča na Váhu',
   4: 'Jarmok v Mikuláši',
-  5: 'Kapitán Liptova',
+  5: 'Jánošíkove diery',
+  6: 'Kapitán Liptova',
 };
 
 export const QUEST_STEPS: QuestStepDef[] = [
@@ -90,10 +91,43 @@ export const QUEST_STEPS: QuestStepDef[] = [
     hint: 'Choď von z Mikuláša – ďalej ako za vdovinu chalupu pri hradskej.',
   },
   { id: 'c4_rozdel', chapter: 4, text: 'Vráť okradnutým kramárom ich groše – daj podiel vdove Hane pod mestom.' },
+  { id: 'c5_jan', chapter: 5, text: 'Po Mikuláši ťa hľadá celá stolica. Zájdi za bratom Jánom do Terchovej.' },
+  {
+    id: 'c5_ondras',
+    chapter: 5,
+    text: 'Nájdi drevorubača Ondráša v roklinách nad Terchovou.',
+    hint: 'Chodník vedie z Terchovej na sever, do úzkej skalnej rokliny.',
+  },
+  {
+    id: 'c5_vystup',
+    chapter: 5,
+    text: 'Vystúp roklinou po rebríkoch na Horné diery ({n}/3)',
+    goal: 3,
+    hint: 'Pri rebríku stlač E. Zlomený rebrík oprav povrazom od Ondráša.',
+  },
+  {
+    id: 'c5_medved',
+    chapter: 5,
+    text: 'V úkryte sa rozvalil medveď! Vyžeň ho – valaškou, alebo mu zahraj na fujare.',
+    hint: 'Fujara [G] zblízka ho možno rozveselí. Valaškou to bude dlhý tanec.',
+  },
+  {
+    id: 'c5_zariad',
+    chapter: 5,
+    text: 'Zariaď zbojnícky úkryt ({n}/3)',
+    goal: 3,
+    hint: 'Ohnisko, lôžka a stôl – pri každom mieste stlač E.',
+  },
+  {
+    id: 'c5_hostina',
+    chapter: 5,
+    text: 'Zvolaj družinu k ohňu a osláv nový úkryt odzemkom!',
+    hint: 'Pri ohni stlač B a vyber Odzemok (2).',
+  },
   {
     id: 'free',
-    chapter: 5,
-    text: 'Voľná hra: pýtaj si u bača typy na pánov, prepadávaj koče, pomáhaj chudobe.',
+    chapter: 6,
+    text: 'Voľná hra: prepadávaj koče, pomáhaj chudobe. Zbojnícke chodníky ťa prevedú po Liptove.',
   },
 ];
 

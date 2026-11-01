@@ -3,6 +3,7 @@ import { ECONOMY, ITEMS, LOC } from '@/config/constants';
 import type { Game } from '@/core/game';
 import {
   BACA,
+  DREVORUBAC,
   FERO,
   GAJDOSIK,
   GAZDINA,
@@ -34,6 +35,7 @@ import {
   KRAMAR_TALK,
   KRCMAR_GOSSIP,
   MESTAN_TALK,
+  ONDRAS_TALK,
   PONOCNY_TALK,
   POSTER_TEXT,
   VILLAGER_HIGH,
@@ -110,6 +112,7 @@ function createTownNpcs(game: Game): Npc[] {
     new Npc('hostinsky', 'Hostinský Kubo', HOSTINSKY, s, doors.hostinec.x - 0.8, doors.hostinec.z + 2, -Math.PI / 2, w),
     new Npc('vyberca', 'Výberca Gašpar Mastný', VYBERCA, s, round[0].x, round[0].z, 0, w).sleepsAt(doors.vyberca, 18.5, 7.5).walksRoute(round),
     new Npc('hana', 'Vdova Hana', HANA, s, hana.x, hana.z + 0.6, 0, w).sleepsAt(hana, 20.5, 6),
+    new Npc('ondras', 'Drevorubač Ondráš', DREVORUBAC, s, w.ondrasPos.x, w.ondrasPos.z, Math.PI, w),
   ];
 }
 
@@ -604,9 +607,169 @@ function katarinaDialog(game: Game): DialogNode {
   ]);
 }
 
-function janDialog(game: Game): DialogNode {
+// --------------------------------------------------------------------------- Jánošíkove diery
+
+/** Zbojnícke chodníky – secret paths between the signposts (unlocked after chapter 5). */
+export const CHODNIKY: Record<string, string> = {
+  ukryt: 'Zbojnícky úkryt (Horné diery)',
+  diery: 'Dolné diery (Ondráš)',
+  terchova: 'Terchová',
+  vatra: 'Rovná hora',
+  dedina: 'Dedina (šenk)',
+  mikulas: 'Liptovský Mikuláš (vdova Hana)',
+};
+
+function ondrasDialog(game: Game): DialogNode {
+  const t = (text: string, options?: DialogOption[]): DialogNode => talk(game, 'ondras', text, options);
+  const q = game.quests;
+  if (q.is('c5_ondras')) {
+    return t(
+      'Jánošík? Ten Jánošík? No… myslel som, že budeš vyšší. A že budeš mať aspoň dve valašky.\n\nÚkryt, hovoríš? Hore na Horných dierach je skalný previs, pod ním suchá jaskyňa. Ale cesta vedie cez tri vodopády a po rebríkoch. Prostredný rebrík zlomil minulú zimu medveď. Ten istý medveď, čo teraz v tej jaskyni spí. Volám ho Dunčo. On ma nevolá nijako.\n\nTu máš povraz – rebrík ním zviažeš. A s Dunčom… no, s Dunčom sa dohodni.',
+      [
+        {
+          label: 'Vďaka, Ondráš. S medveďom sa nejako dohodneme.',
+          action: () => {
+            game.data.flags.rope = true;
+            game.toast('Dostal si povraz.', 'good');
+            q.advance('c5_ondras');
+            return t('Vravel som „dohodni“, nie „pobi“. Dunčo má rád muziku. Ja nie, ale on áno.');
+          },
+        },
+      ],
+    );
+  }
+  if (q.is('c5_vystup', 'c5_medved')) return t('Dunčo má rád muziku – fujaru najmä. Keď sa nahnevá, zas nemá rád nič.');
+  return t(line(ONDRAS_TALK, game.rng));
+}
+
+/** Climbing up or down one of the gorge ladders. */
+function ladderInteractables(game: Game): Interactable[] {
+  const list: Interactable[] = [];
+  for (const ladder of game.world.ladders) {
+    list.push({
+      id: `ladder${ladder.index}-up`,
+      radius: 2.2,
+      position: () => ladder.bottom,
+      label: () => {
+        if (!game.quests.reached('c5_vystup')) return 'Rebrík – najprv sa poraď s Ondrášom';
+        if (ladder.broken) return game.data.flags.rope ? 'Zviazať zlomený rebrík povrazom' : 'Rebrík je zlomený';
+        return 'Vyliezť po rebríku';
+      },
+      act: () => {
+        if (!game.quests.reached('c5_vystup')) {
+          game.toast('Rebrík vyzerá vratko. Ondráš dolu v rokline vie, ktorý drží.', 'info');
+          return;
+        }
+        if (ladder.broken) {
+          if (!game.data.flags.rope) {
+            game.toast('Bez povrazu sa to nedá – priečky chýbajú.', 'bad');
+            return;
+          }
+          game.data.flags[`ladder${ladder.index}Fixed`] = true;
+          game.world.repairLadder(ladder.index);
+          game.sfx('straw', ladder.bottom);
+          game.toast('Rebrík je zviazaný. Drží – aspoň zatiaľ.', 'good');
+          game.requestSave();
+          return;
+        }
+        game.climbLadder(ladder, true);
+      },
+    });
+    list.push({
+      id: `ladder${ladder.index}-down`,
+      radius: 2.2,
+      position: () => ladder.top,
+      label: () => (ladder.broken ? null : 'Zliezť po rebríku dolu'),
+      act: () => game.climbLadder(ladder, false),
+    });
+  }
+  return list;
+}
+
+/** The three spots of the hideout that the družina furnishes. */
+function hideoutInteractables(game: Game): Interactable[] {
+  const h = game.world.hideout;
+  const spot = (id: 'fire' | 'beds' | 'table', pos: THREE.Vector3, label: string, cost: number, done: string): Interactable => ({
+    id: `hideout-${id}`,
+    radius: 2.8,
+    position: () => pos,
+    label: () => (game.quests.is('c5_zariad') && !game.data.flags[`hideout_${id}`] ? label : null),
+    act: () => {
+      if (cost > 0 && !game.spend(cost)) return;
+      game.buildHideout(id);
+      game.toast(done, 'good');
+    },
+  });
+  return [
+    spot('fire', h.firePos, 'Postaviť ohnisko', 0, 'Ohnisko horí! Dym sa stráca v skalách – nikto ho neuvidí.'),
+    spot('beds', h.bedsPos, 'Nastlať lôžka z čečiny', 0, 'Lôžka z čečiny – voňavé, mäkké a pichľavé presne tak akurát.'),
+    spot(
+      'table',
+      h.tablePos,
+      `Zbiť stôl a lavice (${ECONOMY.hideoutTablePrice} dukátov – klince od kováča)`,
+      ECONOMY.hideoutTablePrice,
+      'Zbojnícky stôl! Teraz už chýba len pečená ovca. A tanier.',
+    ),
+    {
+      id: 'hideout-chest',
+      radius: 2.4,
+      position: () => h.chestPos,
+      label: () => (game.data.flags.hideoutReady ? 'Zbojnícka truhlica' : null),
+      act: () => game.openDialog(janDialog(game, true)),
+    },
+    {
+      id: 'hideout-sleep',
+      radius: 2.6,
+      position: () => h.bedsPos,
+      label: () => {
+        if (!game.data.flags.hideout_beds || game.quests.is('c5_zariad')) return null;
+        const hr = game.dayNight.time;
+        return hr >= 18 || hr < 5 ? 'Vyspať sa v úkryte do rána' : null;
+      },
+      act: () => game.sleepUntilMorning(),
+    },
+  ];
+}
+
+function signpostInteractables(game: Game): Interactable[] {
+  return Object.entries(game.world.signposts).map(([id, pos]) => ({
+    id: `chodnik-${id}`,
+    radius: 2.4,
+    position: () => pos,
+    label: () => (game.data.flags.chodniky ? 'Zbojnícky chodník – kam pôjdeme?' : null),
+    act: () =>
+      game.openDialog({
+        speaker: 'Zbojnícky chodník',
+        text: 'Tajné chodníky cez hory, ktoré pozná len družina a pár bačov. Kam pôjdeme?',
+        options: [
+          ...Object.entries(CHODNIKY)
+            .filter(([to]) => to !== id && game.world.signposts[to])
+            .map(([to, name]) => ({ label: name, action: () => game.travel(to) })),
+          { label: 'Nikam, ešte sa poobzerám.' },
+        ],
+      }),
+  }));
+}
+
+/** Brat Ján and his chest – or, with `hideout`, the zbojníci's own chest up in the diery (same stash). */
+function janDialog(game: Game, hideout = false): DialogNode {
   const d = game.data;
-  const t = (text: string, options?: DialogOption[]): DialogNode => talk(game, 'jan', text, options);
+  const t = (text: string, options?: DialogOption[]): DialogNode =>
+    hideout ? { speaker: 'Zbojnícka truhlica', text, options } : talk(game, 'jan', text, options);
+  if (!hideout && game.quests.is('c5_jan')) {
+    return t(
+      'Juraj! Vieš, čo sa o tebe hovorí v Mikuláši? Že si sa premenil na handlára, okradol výbercu a odletel na koze. Pandúri teraz prehľadávajú každú stodolu od Ružomberka po Hrádok. Aj moju.\n\nPotrebuješ úkryt, kde ťa nikto nenájde. Nad Terchovou sú skalné diery – rokliny, kade ani kamzík nechodí. Drevorubač Ondráš tam táborí, ten pozná každý rebrík.',
+      [
+        {
+          label: 'Diery, hovoríš? Idem za Ondrášom.',
+          action: () => {
+            game.quests.advance('c5_jan');
+            return t('Chodník ide z dediny na sever, rovno do rokliny. A Juraj – keď tam stretneš medveďa, pozdravuj ho odo mňa. Z diaľky.');
+          },
+        },
+      ],
+    );
+  }
   const node = (): DialogNode => {
     const options: DialogOption[] = [
       {
@@ -636,7 +799,9 @@ function janDialog(game: Game): DialogNode {
       bye,
     ];
     return t(
-      `Juraj! Mama by plakala, keby vedela… Ale truhlicu ti postrážim, u mňa ju pandúri hľadať nebudú.\n\nV truhlici je ${d.stash} dukátov. Čo, čo sa schová, to sa nestratí – ani keď ťa drábi dolapia.`,
+      hideout
+        ? `Dubová truhlica v skale. Brat Ján ju sem pomohol vyvliecť – vraj už nechce mať doma zbojnícky poklad.\n\nV truhlici je ${d.stash} dukátov.`
+        : `Juraj! Mama by plakala, keby vedela… Ale truhlicu ti postrážim, u mňa ju pandúri hľadať nebudú.\n\nV truhlici je ${d.stash} dukátov. Čo, čo sa schová, to sa nestratí – ani keď ťa drábi dolapia.`,
       options,
     );
   };
@@ -758,6 +923,11 @@ export function createInteractables(game: Game): Interactable[] {
     npcAt(game, 'hostinsky', 2.8, () => 'Hostinský Kubo – jedlo a nocľah', () => game.openDialog(hostinskyDialog(game))),
     npcAt(game, 'hana', 2.6, () => 'Vdova Hana – hovoriť', () => game.openDialog(hanaDialog(game))),
     collectorInteractable(game),
+    // Jánošíkove diery
+    npcAt(game, 'ondras', 2.8, () => 'Drevorubač Ondráš – hovoriť', () => game.openDialog(ondrasDialog(game))),
+    ...ladderInteractables(game),
+    ...hideoutInteractables(game),
+    ...signpostInteractables(game),
     {
       id: 'plagat',
       radius: 2.4,

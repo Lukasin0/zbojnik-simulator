@@ -26,6 +26,8 @@ interface DebugCommands {
   step(id: QuestStepId): string;
   disguise(on: boolean): string;
   halt(on: boolean): string;
+  gorge(): unknown;
+  bear(action: 'spawn' | 'dance' | 'state'): string;
 }
 
 declare global {
@@ -150,6 +152,25 @@ export function installDebugTools(game: Game, loop: GameLoop): void {
       game.data.questStep = id;
       game.data.questCounter = 0;
       return `quest → ${id}`;
+    },
+    gorge() {
+      return {
+        ladders: game.world.ladders.map((l) => ({ i: l.index, bottom: l.bottom.toArray().map(Math.round), top: l.top.toArray().map(Math.round), broken: !!l.broken })),
+        fire: game.world.hideout.firePos.toArray().map(Math.round),
+        signs: Object.fromEntries(Object.entries(game.world.signposts).map(([k, v]) => [k, [Math.round(v.x * 10) / 10, Math.round(v.z * 10) / 10]])),
+        player: game.player.position.toArray().map((v) => Math.round(v * 10) / 10),
+        step: game.data.questStep,
+        counter: game.data.questCounter,
+        bear: game.bear ? { state: game.bear.state, hp: Math.round(game.bear.hp), pos: game.bear.position.toArray().map(Math.round) } : null,
+      };
+    },
+    bear(action) {
+      if (action === 'spawn') {
+        game.data.questStep = 'c5_medved';
+        game.spawnBear();
+      }
+      if (action === 'dance') game.bear?.dance();
+      return game.bear ? `medveď: ${game.bear.state}` : 'žiadny medveď';
     },
     halt(on) {
       const v = game.npcs.get('vyberca');

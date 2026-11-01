@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import {
+  GORGE,
+  GORGE_STEPS,
   LOC,
   REGIONS,
   ROAD_HALF_WIDTH,
@@ -79,6 +81,7 @@ const PATHS: [number, number, number, number][] = [
   [-30, -30, -62, -74],
   [60, 0, 95, -40],
   [95, -40, 116, -66],
+  [122, -82, 130, -106],
   // Mikuláš: from the hradská up to the square, and to the widow's hut
   [330, 82, 330, roadZ(330)],
   [LOC.hana.x, LOC.hana.z + 3, LOC.hana.x + 4, roadZ(LOC.hana.x + 4)],
@@ -97,8 +100,8 @@ export function pathDistance(x: number, z: number): number {
   return d;
 }
 
-/** Analytic terrain height used to build the mesh. */
-export function heightAt(x: number, z: number): number {
+/** Valley terrain before the gorge is cut into the mountains. */
+function valleyHeight(x: number, z: number): number {
   let h = baseHeight(x, z);
   for (const f of FLATS) {
     const d = Math.hypot(x - f.x, z - f.z);
@@ -112,6 +115,70 @@ export function heightAt(x: number, z: number): number {
   const dRiver = Math.abs(z - riverZ(x));
   if (dRiver < 13) h = lerp(h, -2.6, smoothstep(13, 5, dRiver) * open);
   return h;
+}
+
+/** Floor height of the gorge entrance – every node's `dh` is relative to it. */
+const GORGE_H0 = valleyHeight(GORGE[0].x, GORGE[0].z);
+
+export interface GorgePoint {
+  /** distance from the floor's centre line */
+  dist: number;
+  /** half-width of the walkable floor there */
+  r: number;
+  floor: number;
+  /** nearest point on the centre line */
+  x: number;
+  z: number;
+  /** metres along the gorge from its entrance */
+  along: number;
+}
+
+const gorgeTmp: GorgePoint = { dist: 0, r: 0, floor: 0, x: 0, z: 0, along: 0 };
+
+/** Floor height along segment i at fraction t – a sharp rock step where a waterfall falls. */
+export function gorgeFloor(i: number, t: number): number {
+  const a = GORGE[i];
+  const b = GORGE[i + 1];
+  const k = (GORGE_STEPS as readonly number[]).includes(i) ? smoothstep(0.42, 0.58, t) : t;
+  return GORGE_H0 + lerp(a.dh, b.dh, k);
+}
+
+/** Nearest point of Jánošíkove diery (returns a shared object – copy what you keep). */
+export function gorgeAt(x: number, z: number): GorgePoint {
+  let best = Infinity;
+  let along = 0;
+  for (let i = 0; i < GORGE.length - 1; i++) {
+    const a = GORGE[i];
+    const b = GORGE[i + 1];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const len = Math.hypot(dx, dz);
+    const t = clamp(((x - a.x) * dx + (z - a.z) * dz) / (len * len), 0, 1);
+    const px = a.x + dx * t;
+    const pz = a.z + dz * t;
+    const d = Math.hypot(x - px, z - pz);
+    if (d < best) {
+      best = d;
+      gorgeTmp.dist = d;
+      gorgeTmp.r = lerp(a.r, b.r, t);
+      gorgeTmp.floor = gorgeFloor(i, t);
+      gorgeTmp.x = px;
+      gorgeTmp.z = pz;
+      gorgeTmp.along = along + len * t;
+    }
+    along += len;
+  }
+  return gorgeTmp;
+}
+
+/** Analytic terrain height used to build the mesh: valley + the gorge cut into the rock. */
+export function heightAt(x: number, z: number): number {
+  const h = valleyHeight(x, z);
+  const g = gorgeAt(x, z);
+  if (g.dist > g.r + 7) return h;
+  // sheer walls a few metres from the floor – but no wall across the entrance
+  const wall = Math.max(h, g.floor + 14 * smoothstep(4, 30, g.along));
+  return lerp(wall, g.floor, smoothstep(g.r + 7, g.r, g.dist));
 }
 
 /** `wet` 0..1 – after rain the mud patches grow. */
@@ -151,6 +218,8 @@ export function colorAt(x: number, z: number, h: number, slope: number, out: THR
   if (Math.abs(x - LOC.field.x) < 9 && Math.abs(z - LOC.field.z) < 6) {
     return out.copy(Math.floor((z - LOC.field.z + 6) / 1.5) % 2 === 0 ? C.field : C.grassA);
   }
+  const g = gorgeAt(x, z);
+  if (g.dist < g.r + 0.5 && g.along > 12) return out.copy(C.rock).lerp(C.path, 0.45);
   if (h > 46) return out.copy(C.snow);
   if (slope > 0.85 || h > 30) return out.copy(C.rock);
   if (pathDistance(x, z) < 1.7) return out.copy(C.path);

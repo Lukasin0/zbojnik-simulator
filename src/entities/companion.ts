@@ -5,16 +5,23 @@ import type { GroundProvider } from '@/components/physics-body';
 import type { HitSource } from '@/systems/combat-system';
 import type { CompanionId } from '@/types/game-types';
 import { Actor } from './actor';
-import type { Pandur } from './enemy';
 import { NPC_ATTACKS } from './attacks';
+
+/** Anything the družina can fight – pandúri, the bear… */
+export interface Foe {
+  readonly position: THREE.Vector3;
+  readonly alerted: boolean;
+  isAlive(): boolean;
+  receiveHit(damage: number, from: THREE.Vector3, source: HitSource): void;
+}
 
 export interface CompanionContext {
   world: GroundProvider;
   leader: Actor;
   leaderYaw: number;
-  enemies: Pandur[];
+  enemies: readonly Foe[];
   combat: boolean;
-  onStrike(c: Companion, target: Pandur): void;
+  onStrike(c: Companion, target: Foe): void;
 }
 
 /** A recruited member of the družina. Follows the captain and fights alerted pandúri. */
@@ -23,7 +30,7 @@ export class Companion extends Actor {
   downed = false;
   private cooldown = 0;
   private downTimer = 0;
-  private target: Pandur | null = null;
+  private target: Foe | null = null;
   private struck = false;
   private swing = Math.floor(Math.random() * 3);
 

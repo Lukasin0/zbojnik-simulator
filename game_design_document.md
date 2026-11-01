@@ -52,6 +52,39 @@ Keď ho starý parťák Tomáš Uhorčík zasvätí do zbojníckeho remesla a ne
 * **Minihra: Páka v šenku**
   * Preťahovanie sa rukou pri stolu na získanie rešpektu medzi lokálnymi chlapmi.
 
+### 3.3 Pokračovanie kampane (hotové vo web prototype)
+
+* **Kapitola 4: Jarmok v Mikuláši**
+  * Šenkár dá tip na výbercu daní Gašpara Mastného → gazdiná Mara ušije **handlársky kabát** (20 d) → cesta po hradskej na východ do **Liptovského Mikuláša** → **vreckovanie** výbercu zozadu (minihra) → útek z mesta skôr, než si všimne (25 s) → 60 d vdove Hane pre okradnutých kramárov.
+  * Mesto: námestie s dlažbou, radnica s hodinovou vežou, kostol, meštianske domy, hostinec U Zlatej husi, pranier, 6 stánkov, plagát „HĽADÁ SA“.
+  * Výberca chodí po okruhu od stánku k stánku, pri každom zdaní niečo absurdné; kramár za ním hundre.
+* **Kapitola 5: Jánošíkove diery**
+  * Brat Ján: „hľadá ťa celá stolica“ → drevorubač Ondráš v Dolných dierach dá povraz → výstup úzkou roklinou cez 3 vodopády po rebríkoch (prostredný zlomený, treba ho zviazať) → v jaskyni pod previsom spí **medveď Dunčo** → vyhnať ho valaškou (480 HP, uteká pri 25 %) alebo **fujarou** (Dunčo odtancuje odzemok a odíde, +25 ráž) → zariadiť úkryt (ohnisko, lôžka z čečiny, stôl 15 d) → odzemok pri ohni s družinou.
+  * Odmena: zbojnícka truhlica v úkryte (spoločná s Jánovou), nocľah zadarmo, **zbojnícke chodníky** (rýchle cestovanie medzi rázcestníkmi, uplynie 1 hodina).
+
+### 3.4 Plán ďalších kapitol (6 – 13)
+
+| # | Kapitola | Oblasť | Nová mechanika |
+|---|---|---|---|
+| 6 | Väzni z Likavského hradu | hrad zvnútra (nádvorie, žalár) | nočné plíženie, stráže s lampášmi, kľúče |
+| 7 | Pltníci na Váhu | rieka, pltnícky prístav | splav na plti, boj na vode |
+| 8 | Panská poľovačka | Kráľova hoľa, hlboký les | pasce, zvieratá |
+| 9 | Zbojnícka svadba | koliba, lúka | tanečný súboj v odzemku (rytmická minihra) |
+| 10 | Hajdúsky kapitán | pandúrska stanica | hľadanosť, boss |
+| 11 | Tuhá zima | sneh na celej mape, Tatry | zimné obdobie, sane |
+| 12 | Zrada v Klenovci | Klenovec | útek bez zbraní |
+| 13 | Súd v Mikuláši | námestie | finálna bitka, výber konca |
+
+### 3.5 Systémy sveta (pre prenos do Unity)
+
+* **Denný cyklus:** 1 herná hodina = 60 s. Dedinčania majú rozvrh spánku (odchod k dverám, ráno von); v noci sa dá zaklopať. Ponocný s lampášom vyvoláva hodiny. Krčma, vatra a salaš nespia.
+* **Počasie:** jasno / zamračené / dážď / búrka (blesky, hrom), mokrá zem = viac blata, v daždi pandúri horšie počujú.
+* **Boj:** 3-úderové kombo (šikmý sek, sek späť, skok zhora), valaškový vír (stredné tlačidlo), kresadlovka cez rameno, zamrznutie pri zásahu. Pandúri, mestská stráž a medveď zdieľajú jeden systém zásahov.
+* **Prestrojenie (H):** stráže v meste bez neho napĺňajú ukazovateľ podozrenia; vytiahnutá valaška prestrojenie zruší.
+* **Mapa:** jeden súvislý svet – dolina (dedina, Rovná hora, salaš, Terchová, hrad), údolie Váhu na východ, Liptovský Mikuláš a roklina Jánošíkove diery. Hory obkolesujú hrateľnú plochu.
+* **Emócie (B):** mávanie, odzemok (družina sa pridá, +ráž), Hej-hou!, smiech, sadnúť si.
+* **Dáta pre port:** úlohy `src/systems/quest-system.ts`, dialógy `src/story/dialogs.ts`, hlášky `src/story/lines.ts`, čísla a miesta `src/config/constants.ts`.
+
 ---
 
 ## 4. TECHNICKÝ STOH A ASSET PIPELINE

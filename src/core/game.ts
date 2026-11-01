@@ -15,7 +15,9 @@ import type { SceneManager } from './scene-manager';
 import { PlayerInputHandler } from '@/components/input-handler';
 import type { CharacterLook } from '@/components/character-model';
 import type { Actor } from '@/entities/actor';
-import { Companion } from '@/entities/companion';
+import { Companion, type Foe } from '@/entities/companion';
+import { BEAR_TUNING, Bear } from '@/entities/bear';
+import type { Ladder } from '@/world/world';
 import type { Pandur } from '@/entities/enemy';
 import { DISGUISE, GAJDOSIK, ILCIK, UHORCIK } from '@/entities/looks';
 import type { Npc } from '@/entities/npc';
@@ -32,13 +34,13 @@ import type { InputSystem } from '@/systems/input-system';
 import { ParticleSystem } from '@/systems/particle-system';
 import { CHAPTER_TITLES, QuestSystem, type QuestStepDef } from '@/systems/quest-system';
 import { createNewSave, type SaveManager } from '@/systems/save-manager';
-import { createInteractables, createNpcs, type Interactable } from '@/story/dialogs';
+import { CHODNIKY, createInteractables, createNpcs, type Interactable } from '@/story/dialogs';
 import type { GameEvents, ToastKind } from '@/types/events';
 import type { CompanionId, ItemId, NpcId, SaveData } from '@/types/game-types';
 import { DialogBox, type DialogNode } from '@/ui/dialog';
 import { Hud, type MapMarker } from '@/ui/hud';
 import { EventEmitter } from '@/utils/event-emitter';
-import { angleDiff, mulberry32, pick } from '@/utils/math-utils';
+import { angleDiff, lerp, mulberry32, pick } from '@/utils/math-utils';
 import { TOWN_RADIUS, TownSystem } from '@/systems/town-system';
 import { Scheduler } from '@/utils/timer';
 import { World } from '@/world/world';
@@ -53,6 +55,10 @@ import {
   BANTER_MUD,
   BANTER_NIGHT,
   BANTER_RAIN,
+  BEAR_CREW,
+  BEAR_HIT,
+  BEAR_ROAR,
+  HIDEOUT_TALK,
   HOUR_NAMES,
   KRAMAR_GRUMBLE,
   PANDUR_DOWN,
@@ -105,6 +111,9 @@ export class Game {
   readonly combat = new CombatSystem();
   readonly ambush: AmbushSystem;
   readonly town: TownSystem;
+  /** Dunčo in the hideout (chapter 5) – null when he is not around. */
+  bear: Bear | null = null;
+  private climb: { from: THREE.Vector3; to: THREE.Vector3; t: number; duration: number; ladder: Ladder; up: boolean } | null = null;
   readonly player: Player;
   readonly companions: Companion[] = [];
   readonly npcs = new Map<NpcId, Npc>();
@@ -173,6 +182,7 @@ export class Game {
     this.town = new TownSystem(app.scene, this.world);
     this.combat.addSource(() => this.ambush.escorts);
     this.combat.addSource(() => this.town.guards);
+    this.combat.addSource(() => (this.bear ? [this.bear] : []));
     this.player = new Player(app.scene);
     this.player.onHurt = (_p, amount) => this.onPlayerHurt(amount);
     this.player.teleport(LOC.vatra.x + 5, LOC.vatra.z + 6, this.world);
@@ -315,6 +325,12 @@ export class Game {
     if (this.data.questStep === 'c3_prepad') this.spawnStoryCoach();
     this.town.reset();
     this.setDisguise(!!this.data.flags.disguised && !!this.data.flags.hasDisguise, true);
+    this.climb = null;
+    this.bear?.dispose();
+    this.bear = null;
+    if (this.data.questStep === 'c5_medved') this.spawnBear();
+    this.world.ladders.forEach((l) => this.data.flags[`ladder${l.index}Fixed`] && this.world.repairLadder(l.index));
+    this.applyHideout();
 
     this.cameraCtl.snap(this.player.position, this.player.facing);
     this.playing = true;
@@ -347,9 +363,134 @@ export class Game {
     return !!this.data.flags.disguised;
   }
 
-  /** Any fight going on – a coach escort or the Mikuláš guards. */
+  /** Any fight going on – a coach escort, the Mikuláš guards or an angry bear. */
   get inCombat(): boolean {
-    return this.ambush.combatActive || this.town.combatActive;
+    return this.ambush.combatActive || this.town.combatActive || !!this.bear?.alerted;
+  }
+
+  // ------------------------------------------------------------------ Jánošíkove diery
+
+  get climbing(): boolean {
+    return this.climb !== null;
+  }
+
+  /** Hand over hand up (or down) a gorge ladder; the družina follows. */
+  climbLadder(ladder: Ladder, up: boolean): void {
+    if (this.climb || this.inCombat) return;
+    const from = up ? ladder.bottom : ladder.top;
+    const to = up ? ladder.top : ladder.bottom;
+    this.player.cancelEmote();
+    this.player.teleport(from.x, from.z, this.world);
+    this.climb = { from: from.clone(), to: to.clone(), t: 0, duration: 1.2 + Math.abs(to.y - from.y) * 0.18, ladder, up };
+    this.player.facing = up ? ladder.yaw : ladder.yaw;
+    this.player.pose = 'climb';
+    this.sfx('jump', from, 0.7);
+  }
+
+  private updateClimb(dt: number): void {
+    const c = this.climb;
+    if (!c) return;
+    const p = this.player;
+    p.beginTick();
+    c.t = Math.min(1, c.t + dt / c.duration);
+    // straight up the rungs first, then the step over the top (reversed going down)
+    const k = c.up ? c.t : 1 - c.t;
+    const lowP = c.up ? c.from : c.to;
+    const highP = c.up ? c.to : c.from;
+    const vertical = Math.min(1, k / 0.8);
+    const over = Math.max(0, (k - 0.8) / 0.2);
+    p.position.set(lerp(lowP.x, highP.x, over), lerp(lowP.y, highP.y, vertical), lerp(lowP.z, highP.z, over));
+    p.body.velocity.set(0, 0, 0);
+    if (c.t < 1) return;
+    this.climb = null;
+    p.pose = 'normal';
+    p.teleport(c.to.x, c.to.z, this.world);
+    // the družina climbs right behind the captain
+    this.companions.forEach((comp, i) => {
+      const a = c.ladder.yaw + Math.PI + (i - 1) * 0.6;
+      comp.teleport(c.to.x + Math.sin(a) * 1.8, c.to.z + Math.cos(a) * 1.8, this.world);
+    });
+    const flag = `ladder${c.ladder.index}Climbed`;
+    if (c.up && !this.data.flags[flag]) {
+      this.data.flags[flag] = true;
+      this.quests.progress('c5_vystup');
+    }
+    this.requestSave();
+  }
+
+  spawnBear(): void {
+    this.bear?.dispose();
+    const h = this.world.hideout;
+    const cave = this.world.ground(h.chestPos.x, h.chestPos.z);
+    this.bear = new Bear(this.app.scene, h.bearPos.x, h.bearPos.z, cave, this.world);
+    this.bear.facing = Math.PI;
+  }
+
+  private updateBear(dt: number): void {
+    const bear = this.bear;
+    if (!bear) return;
+    const wasAlert = bear.alerted;
+    const seen = bear.hitsTaken;
+    bear.update(dt, {
+      world: this.world,
+      targets: [this.player, ...this.companions],
+      onStrike: (b, t) => {
+        t.receiveHit(BEAR_TUNING.damage, b.position, 'enemy');
+        this.sfx('hit', t.position, 0.6);
+        if (t === this.player) this.cameraCtl.shake(0.4);
+      },
+      onRoar: (b) => {
+        this.bark(b.root, line(BEAR_ROAR, this.rng), 2.5);
+        this.sfx('thunder', b.position, 2.2);
+        this.cameraCtl.shake(0.3);
+        const crew = this.companions.find((c) => c.isAlive());
+        if (crew) this.scheduler.after(2.2, () => this.bark(crew.model.root, line(BEAR_CREW, this.rng), 3.5));
+      },
+      onGone: (b, how) => {
+        this.bear = null;
+        b.dispose();
+        this.events.emit('combat:end', { won: true });
+        if (how === 'danced') {
+          this.player.raz = Math.min(100, this.player.raz + 25);
+          this.data.reputation += 3;
+          this.toast('Dunčo odtancoval do hory. Úkryt je váš – a Dunčo má nový obľúbený nápev. Ráž +25', 'quest');
+        } else {
+          this.toast('Dunčo to vzdal a zmizol v skalách. Úkryt je váš!', 'quest');
+        }
+        this.quests.advance('c5_medved');
+      },
+    });
+    if (bear.hitsTaken > seen && this.rng() < 0.4) this.bark(bear.root, line(BEAR_HIT, this.rng), 1.5);
+    if (!wasAlert && bear.alerted) this.events.emit('combat:start', { enemies: 1 });
+  }
+
+  /** Furnish one part of the hideout (chapter 5). */
+  buildHideout(id: 'fire' | 'beds' | 'table'): void {
+    if (this.data.flags[`hideout_${id}`]) return;
+    this.data.flags[`hideout_${id}`] = true;
+    this.applyHideout();
+    const pos = id === 'fire' ? this.world.hideout.firePos : id === 'beds' ? this.world.hideout.bedsPos : this.world.hideout.tablePos;
+    this.sfx(id === 'fire' ? 'burn' : 'chop', pos);
+    this.particles.emit({ x: pos.x, y: pos.y + 0.6, z: pos.z, count: 14, color: [0xd8c26a, 0x8a7a60], speed: 2.5, up: 2 });
+    this.quests.progress('c5_zariad');
+    this.requestSave();
+  }
+
+  private applyHideout(): void {
+    const f = this.data.flags;
+    this.world.setHideout(!!f.hideout_fire, !!f.hideout_beds, !!f.hideout_table, !!f.hideoutReady);
+  }
+
+  /** Zbojnícke chodníky: a quick march to another signpost (an hour passes). */
+  travel(to: string): void {
+    const dest = this.world.signposts[to];
+    if (!dest) return;
+    this.dayNight.setTime(this.dayNight.time + 1);
+    this.player.teleport(dest.x + 1.5, dest.z + 1.5, this.world);
+    this.companions.forEach((c, i) => c.teleport(dest.x - 1 + i, dest.z + 3, this.world));
+    this.cameraCtl.snap(this.player.position, this.player.facing);
+    this.toast(`Zbojníckymi chodníkmi cez hory… o hodinu ste v cieli: ${CHODNIKY[to] ?? to}.`, 'info');
+    this.requestSave();
   }
 
   setDisguise(on: boolean, silent = false): void {
@@ -575,7 +716,8 @@ export class Game {
 
   /** Called when the fujara minigame ends. */
   playFujara(): void {
-    if (this.inCombat) {
+    // only a bear can be argued with by music
+    if (this.ambush.combatActive || this.town.combatActive) {
       this.toast('Teraz nie je čas na muziku!', 'bad');
       return;
     }
@@ -585,6 +727,18 @@ export class Game {
       const gain = Math.round(10 + r.score * 30);
       this.player.raz = Math.min(100, this.player.raz + gain);
       this.toast(`Fujara pohladila dušu. Ráž +${gain}`, 'good');
+      const bear = this.bear;
+      if (bear && bear.position.distanceTo(this.player.position) < 25) {
+        if (r.score >= 0.4) {
+          bear.dance();
+          this.bark(bear.root, 'Mrrm… mrm-mrm-mrm! ♪', 3);
+          this.toast('Dunčo sa postavil na zadné… a tancuje odzemok!', 'quest');
+        } else {
+          bear.wake();
+          this.toast('Dunčovi sa tvoje pískanie nepáčilo. Vôbec.', 'bad');
+        }
+        return;
+      }
       const coach = this.ambush.coach;
       if (!coach) return;
       const logX = this.world.ambushTree.fallen ? this.world.ambushTree.position.x : null;
@@ -665,7 +819,11 @@ export class Game {
     }
     if (to.id === 'c3_prepad') this.spawnStoryCoach();
     if (to.id === 'c3_lup') this.toast('Hliadka leží v blate. Zeman sa trasie v koči!', 'quest');
+    if (to.id === 'c5_medved') this.spawnBear();
     if (to.id === 'free') {
+      this.data.flags.chodniky = true;
+      this.data.flags.hideoutReady = true;
+      this.applyHideout();
       this.data.flags.prologueDone = true;
       window.setTimeout(() => this.onPrologueEnd?.(), 1200);
     }
@@ -710,6 +868,23 @@ export class Game {
       case 'c4_utek':
       case 'c4_rozdel':
         return npc('hana');
+      case 'c5_jan':
+        return npc('jan');
+      case 'c5_ondras':
+        return npc('ondras');
+      case 'c5_vystup': {
+        const next = this.world.ladders.find((l) => !this.data.flags[`ladder${l.index}Climbed`]);
+        return next?.bottom ?? this.world.hideout.firePos;
+      }
+      case 'c5_medved':
+        return this.bear?.position ?? this.world.hideout.bearPos;
+      case 'c5_zariad': {
+        const h = this.world.hideout;
+        if (!this.data.flags.hideout_fire) return h.firePos;
+        return !this.data.flags.hideout_beds ? h.bedsPos : h.tablePos;
+      }
+      case 'c5_hostina':
+        return this.world.hideout.firePos;
       case 'free':
         return this.ambush.coach?.position ?? null;
     }
@@ -800,7 +975,8 @@ export class Game {
     const intent = this.inputHandler.read(this.cameraCtl.yaw, controllable);
     this.player.damageBonus =
       (this.data.flags.captain ? PLAYER_TUNING.captainBonus : 0) + (this.time < this.haluskyUntil ? 8 : 0);
-    this.player.update(dt, intent, this.world, this.playerHooks);
+    if (this.climbing) this.updateClimb(dt);
+    else this.player.update(dt, intent, this.world, this.playerHooks);
 
     this.updateVatra();
 
@@ -839,8 +1015,10 @@ export class Game {
     }
     this.town.update(dt, this.townContext());
     this.updateTownQuest();
+    this.updateBear(dt);
 
-    const enemies = [...this.ambush.escorts, ...this.town.guards];
+    const enemies: Foe[] = [...this.ambush.escorts, ...this.town.guards];
+    if (this.bear) enemies.push(this.bear);
     const fighting = this.inCombat;
     for (const c of this.companions) {
       c.update(dt, {
@@ -866,6 +1044,7 @@ export class Game {
     this.world.update(dt, this.time);
     this.particles.update(dt);
     this.emitFireParticles();
+    this.emitWaterfallSpray();
 
     this.updateInteraction();
     this.handleHotkeys();
@@ -916,6 +1095,14 @@ export class Game {
     }
   }
 
+  /** Spray at the foot of the gorge waterfalls. */
+  private emitWaterfallSpray(): void {
+    for (const w of this.world.waterfalls) {
+      if (w.distanceTo(this.player.position) > 50 || this.rng() > 0.6) continue;
+      this.particles.emit({ x: w.x, y: w.y + 0.3, z: w.z, count: 2, spread: 1.0, speed: 1.2, up: 1.6, gravity: -3, drag: 1.5, color: [0xe8f0f4, 0xc8d8e0], life: [0.5, 1.0], size: [0.12, 0.25], grow: 0.4 });
+    }
+  }
+
   private emitFireParticles(): void {
     for (const f of this.world.fires) {
       if (f.pos.distanceTo(this.player.position) > 70 || this.rng() > 0.5) continue;
@@ -937,9 +1124,10 @@ export class Game {
   }
 
   private separateActors(): void {
-    const list: Actor[] = [this.player, ...this.companions.filter((c) => c.isAlive())];
+    const list: Pick<Actor, 'position' | 'radius'>[] = [this.player, ...this.companions.filter((c) => c.isAlive())];
     for (const e of this.ambush.escorts) if (e.isAlive() && e.state !== 'sleepy') list.push(e);
     for (const e of this.town.guards) if (e.isAlive()) list.push(e);
+    if (this.bear?.isAlive()) list.push(this.bear);
     for (const n of this.npcs.values()) if (n.basePose === 'normal' && n.model.root.visible) list.push(n);
     for (let i = 0; i < list.length; i++) {
       const a = list[i].position;
@@ -1056,6 +1244,15 @@ export class Game {
           }
         });
         this.reactNearby(VILLAGER_DANCE, 'cheer');
+        if (this.quests.is('c5_hostina') && p.position.distanceTo(this.world.hideout.firePos) < 12) {
+          this.scheduler.after(5, () => {
+            if (p.pose !== 'odzemok' || !this.quests.is('c5_hostina')) return;
+            const crew = this.companions.find((c) => c.isAlive());
+            if (crew) this.bark(crew.model.root, line(HIDEOUT_TALK, this.rng), 4);
+            this.toast('Odzemok pri ohni pod skalou – nový úkryt je pokrstený!', 'quest');
+            this.quests.advance('c5_hostina');
+          });
+        }
         if (this.time >= this.odzemokReadyAt) {
           this.odzemokReadyAt = this.time + 45;
           this.scheduler.after(5, () => {
@@ -1191,6 +1388,7 @@ export class Game {
     for (const n of this.npcs.values()) n.render(alpha, frameDt);
     this.ambush.render(alpha, frameDt, this.time);
     this.town.render(alpha, frameDt);
+    this.bear?.render(alpha, frameDt);
     const watchman = this.npcs.get('ponocny');
     if (watchman?.model.root.visible) {
       watchman.model.lanternPosition(this.lantern.position);
@@ -1256,7 +1454,7 @@ export class Game {
       reputation: d.reputation,
       inventory: d.inventory,
       party: this.companions.map((c) => ({ name: c.displayName, hp: c.hp, maxHp: c.maxHp, downed: c.downed })),
-      chapter: this.quests.chapter <= 4 ? `Kapitola ${this.quests.chapter}: ${CHAPTER_TITLES[this.quests.chapter]}` : 'Voľná hra',
+      chapter: this.quests.step !== 'free' ? `Kapitola ${this.quests.chapter}: ${CHAPTER_TITLES[this.quests.chapter]}` : 'Voľná hra',
       objective: this.quests.objectiveText(),
       hint: this.quests.def.hint ?? '',
       crosshair: this.input.pointerLocked && this.scenes.top?.name === 'play',
@@ -1281,7 +1479,10 @@ export class Game {
       { x: LOC.field.x, z: LOC.field.z, color: '#c9a36a', label: 'Zemiaky', size: 4 },
       { x: LOC.mikulas.x, z: LOC.mikulas.z, color: '#e8dcc0', label: 'Liptovský Mikuláš', size: 6 },
       { x: LOC.hana.x, z: LOC.hana.z, color: '#7fb069', label: 'Vdova Hana', size: 4 },
+      { x: LOC.diery.x, z: LOC.diery.z, color: '#9aa0a6', label: 'Jánošíkove diery', size: 4 },
     ];
+    if (this.quests.reached('c5_zariad')) markers.push({ x: LOC.ukryt.x, z: LOC.ukryt.z, color: '#ff8a2a', label: 'Úkryt', size: 5 });
+    if (this.bear) markers.push({ x: this.bear.position.x, z: this.bear.position.z, color: '#5a3a22', label: 'Medveď', size: 5 });
     for (const g of this.town.guards) if (g.alerted && g.isAlive()) markers.push({ x: g.position.x, z: g.position.z, color: '#2c3e66', size: 3 });
     for (const c of this.companions) markers.push({ x: c.position.x, z: c.position.z, color: '#ece3d0', size: 3 });
     if (this.ambush.coach) markers.push({ x: this.ambush.coach.position.x, z: this.ambush.coach.position.z, color: '#d8432f', label: 'Panský koč', size: 6 });

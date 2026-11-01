@@ -6,7 +6,7 @@ import type { AttackAnim } from '@/entities/attacks';
 
 export type HatStyle = 'zbojnik' | 'shako' | 'cap' | 'wig' | 'kerchief' | 'bacov' | 'none';
 export type WeaponStyle = 'valaska' | 'saber' | 'staff' | 'lantern' | 'none';
-export type Pose = 'normal' | 'dead' | 'sit' | 'sleep' | 'cheer' | 'downed' | 'wave' | 'laugh' | 'odzemok';
+export type Pose = 'normal' | 'dead' | 'sit' | 'sleep' | 'cheer' | 'downed' | 'wave' | 'laugh' | 'odzemok' | 'climb';
 
 export interface CharacterLook {
   skin: number;
@@ -598,6 +598,21 @@ export class CharacterModel {
         torsoRx = -0.12;
         torsoRy = Math.sin(beat * 0.5) * 0.25;
         headRx = -0.1;
+        break;
+      }
+      case 'climb': {
+        // hand over hand up a ladder
+        const c = Math.sin(this.poseTime * 7);
+        armL = lerp(armL, -2.6 + c * 0.45, k);
+        armR = lerp(armR, -2.6 - c * 0.45, k);
+        armLz = -0.15;
+        armRz = 0.15;
+        hipL = lerp(hipL, -0.7 - c * 0.5, k);
+        hipR = lerp(hipR, -0.7 + c * 0.5, k);
+        kneeL = 1.0 + c * 0.4;
+        kneeR = 1.0 - c * 0.4;
+        torsoRx = 0.1;
+        headRx = -0.25;
         break;
       }
       case 'normal':

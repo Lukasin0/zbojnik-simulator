@@ -28,6 +28,36 @@ export const REGIONS: readonly Region[] = [
 ];
 export const BOUNDS_MARGIN = 32;
 
+export interface GorgeNode {
+  x: number;
+  z: number;
+  /** floor height above the gorge entrance */
+  dh: number;
+  /** half-width of the walkable floor */
+  r: number;
+}
+
+/**
+ * Jánošíkove diery – a narrow rock gorge climbing north from Terchová. Where the floor
+ * jumps between two nodes there is a waterfall and a ladder (see GORGE_STEPS).
+ */
+export const GORGE: readonly GorgeNode[] = [
+  { x: 130, z: -106, dh: 0, r: 7 },
+  { x: 140, z: -134, dh: 1, r: 6.5 },
+  { x: 146, z: -158, dh: 2, r: 9 }, // Dolné diery – Ondrášov tábor
+  { x: 150, z: -172, dh: 10, r: 5.5 },
+  { x: 158, z: -195, dh: 11, r: 5.5 },
+  { x: 161, z: -207, dh: 19, r: 5.5 },
+  { x: 170, z: -226, dh: 20, r: 5.5 },
+  { x: 173, z: -237, dh: 29, r: 5.5 },
+  { x: 180, z: -258, dh: 30, r: 13 }, // Horné diery – zbojnícky úkryt
+];
+
+/** Index of the segment (node i → i+1) with a rock step, waterfall and ladder. */
+export const GORGE_STEPS = [2, 4, 6] as const;
+/** Which ladder is broken and must be mended with a rope. */
+export const BROKEN_LADDER = 1;
+
 // --- Simulation --------------------------------------------------------------
 export const FIXED_DT = 1 / 60;
 export const MAX_STEPS_PER_FRAME = 5;
@@ -102,6 +132,7 @@ export const ECONOMY = {
   /** what the widow Hana gets back for the robbed market folk */
   hanaShare: 60,
   innPrice: 3,
+  hideoutTablePrice: 15,
 } as const;
 
 export interface ItemDef {
@@ -148,6 +179,10 @@ export const LOC = {
   mikulas: { x: 330, z: 58 },
   /** vdova Hana – chalupa pod mestom pri hradskej */
   hana: { x: 268, z: 84 },
+  /** Dolné diery – drevorubač Ondráš camps at the gorge's foot */
+  diery: { x: 146, z: -158 },
+  /** Horné diery – the hideout plateau under the overhang */
+  ukryt: { x: 180, z: -258 },
   ambushX: 20,
 } as const;
 

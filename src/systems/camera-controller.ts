@@ -94,6 +94,17 @@ export class CameraController {
         target < this.occludedDistance || instant ? target : damp(this.occludedDistance, target, 3, dt);
       dist = Math.min(dist, this.occludedDistance);
     }
+    // rock walls (terrain far above the captain's head, e.g. in the gorge) pull the camera
+    // in instead of lifting it over the cliff
+    for (let s = 0.8; s < dist; s += 0.5) {
+      const x = this.pivot.x + this.rayDir.x * s;
+      const z = this.pivot.z + this.rayDir.z * s;
+      const g = this.groundAt(x, z);
+      if (g > this.pivot.y + 1.2 && g > this.pivot.y + this.rayDir.y * s - 0.3) {
+        dist = Math.max(1.2, s - 0.5);
+        break;
+      }
+    }
     this.desired.copy(this.pivot).addScaledVector(this.rayDir, dist);
     // keep the camera above the terrain (check camera point and midpoint)
     const minY = this.groundAt(this.desired.x, this.desired.z) + 0.5;

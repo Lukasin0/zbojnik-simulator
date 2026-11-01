@@ -24,7 +24,8 @@ export type NpcId =
   | 'mestan1'
   | 'mestan2'
   | 'hostinsky'
-  | 'hana';
+  | 'hana'
+  | 'ondras';
 
 export type QuestStepId =
   | 'c1_talk'
@@ -46,11 +47,17 @@ export type QuestStepId =
   | 'c4_vreckuj'
   | 'c4_utek'
   | 'c4_rozdel'
+  | 'c5_jan'
+  | 'c5_ondras'
+  | 'c5_vystup'
+  | 'c5_medved'
+  | 'c5_zariad'
+  | 'c5_hostina'
   | 'free';
 
 export type MinigameKind = 'fujara' | 'paka' | 'halusky';
 
-export type Faction = 'zbojnik' | 'pandur' | 'prop';
+export type Faction = 'zbojnik' | 'pandur' | 'zver' | 'prop';
 
 export interface Vec2 {
   x: number;
