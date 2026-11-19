@@ -29,6 +29,7 @@ import { DialogScene } from '@/scenes/dialog-scene';
 import { MinigameScene } from '@/scenes/minigame-scene';
 import { AmbushSystem } from '@/systems/ambush-system';
 import { PatrolSystem } from '@/systems/patrol-system';
+import { CastleSystem } from '@/systems/castle-system';
 import type { AudioManager, SfxId } from '@/systems/audio-manager';
 import { CameraController } from '@/systems/camera-controller';
 import { CombatSystem } from '@/systems/combat-system';
@@ -124,6 +125,9 @@ export class Game {
   readonly town: TownSystem;
   /** Drábi on their rounds + other zbojnícke partie roaming the hills. */
   readonly patrols: PatrolSystem;
+  /** Hradná stráž of Likava – stealth, vision cones, alarm. */
+  readonly castle: CastleSystem;
+  private castleDetectShown = false;
   private readonly npcFight: NpcFightContext;
   /** Dunčo in the hideout (chapter 5) – null when he is not around. */
   bear: Bear | null = null;
@@ -204,6 +208,8 @@ export class Game {
     this.patrols = new PatrolSystem(app.scene, this.world);
     this.combat.addSource(() => this.patrols.enemies);
     this.combat.addSource(() => this.patrols.bandMembers);
+    this.castle = new CastleSystem(app.scene, this.world);
+    this.combat.addSource(() => this.castle.enemies);
     // villagers can be hit too – the first blow is only a warning
     this.combat.addSource(() => [...this.npcs.values()]);
     Pandur.onBlock = (p) => this.onParry(p);
@@ -396,7 +402,7 @@ export class Game {
 
   /** Any fight going on – a coach escort, the Mikuláš guards or an angry bear. */
   get inCombat(): boolean {
-    if (this.ambush.combatActive || this.town.combatActive || !!this.bear?.alerted || this.patrols.combatActive) return true;
+    if (this.ambush.combatActive || this.town.combatActive || !!this.bear?.alerted || this.patrols.combatActive || this.castle.combatActive) return true;
     for (const n of this.npcs.values()) if (n.alerted) return true;
     return this.patrols.bandMembers.some((n) => n.alerted);
   }
@@ -928,7 +934,25 @@ export class Game {
 
   // ------------------------------------------------------------------ combat callbacks
 
+  /** Crouched blow from behind on someone who has no idea → out cold, silently. */
+  private sneakTakedowns(p: Player, def: AttackDef): void {
+    if (!p.crouching) return;
+    const all = [...this.ambush.escorts, ...this.town.guards, ...this.patrols.enemies, ...this.castle.enemies];
+    for (const e of all) {
+      if (!e.isAlive() || !e.unaware) continue;
+      const dx = e.position.x - p.position.x;
+      const dz = e.position.z - p.position.z;
+      if (Math.hypot(dx, dz) - e.radius > def.range + 0.3) continue;
+      if (Math.abs(angleDiff(p.facing, Math.atan2(dx, dz))) > def.arc / 2) continue;
+      if (e.state !== 'sleepy' && !this.behind(e)) continue;
+      e.knockOut(p.position);
+      this.sfx('hit', e.position, 0.6);
+      this.toastOnce('takedown', 'Tiché omráčenie! Prikrčený úder zozadu zloží nič netušiaceho strážnika.', 'good');
+    }
+  }
+
   private playerMelee(p: Player, def: AttackDef): void {
+    this.sneakTakedowns(p, def);
     const hits = this.combat.melee(p.position, p.facing, def.range, def.arc, p.damage * def.damage, 'zbojnik', 'player', def.knockback);
     let struckEnemy = false;
     for (const h of hits) {
@@ -1102,6 +1126,7 @@ export class Game {
       ...this.patrols.fightingDrabi,
       ...this.ambush.escorts.filter((e) => e.alerted && e.isAlive()),
       ...this.town.guards.filter((e) => e.alerted && e.isAlive()),
+      ...this.castle.fighting,
     ];
     const wasPatrolFight = this.patrols.combatActive;
     this.patrols.update(dt, {
@@ -1109,6 +1134,7 @@ export class Game {
       player: this.player,
       night: this.dayNight.night,
       disguised: this.disguised,
+      crouching: this.player.crouching,
       drabiActive: this.quests.reached('c2_verbuj'),
       hour: this.dayNight.time,
       fight: this.npcFight,
@@ -1122,10 +1148,30 @@ export class Game {
       onGreet: (b) => this.bark(b.model.root, line(BAND_GREET, this.rng), 4),
     });
     if (wasPatrolFight && !this.patrols.combatActive) this.events.emit('combat:end', { won: this.patrols.fightingDrabi.length === 0 });
+    const wasCastleFight = this.castle.combatActive;
+    this.castle.update(dt, {
+      player: this.player,
+      zbojnici,
+      night: this.dayNight.night,
+      disguised: this.disguised,
+      onStrike: (e, t) => this.enemyStrike(e, t),
+      onPandurDown: (e) => this.onPandurDown(e),
+      onAlarm: () => {
+        this.toast('Poplach na hrade! Stráž ťa ide chytiť – bojuj, alebo uteč z dohľadu.', 'bad');
+        this.events.emit('combat:start', { enemies: this.castle.fighting.length });
+      },
+      bark: (t, text, s) => this.bark(t, text, s),
+      setDetection: (v) => {
+        if (v !== null) this.hud.setSuspicion(v, 'Odhalenie');
+        else if (this.castleDetectShown) this.hud.setSuspicion(null);
+        this.castleDetectShown = v !== null;
+      },
+    });
+    if (wasCastleFight && !this.castle.combatActive) this.events.emit('combat:end', { won: this.castle.fighting.length === 0 });
     this.updateTownQuest();
     this.updateBear(dt);
 
-    const enemies: Foe[] = [...this.ambush.escorts, ...this.town.guards, ...this.patrols.fightingDrabi];
+    const enemies: Foe[] = [...this.ambush.escorts, ...this.town.guards, ...this.patrols.fightingDrabi, ...this.castle.fighting];
     for (const n of this.npcs.values()) if (n.alerted) enemies.push(n);
     for (const n of this.patrols.bandMembers) if (n.alerted) enemies.push(n);
     if (this.bear) enemies.push(this.bear);
@@ -1240,6 +1286,7 @@ export class Game {
     if (this.bear?.isAlive()) list.push(this.bear);
     for (const n of this.npcs.values()) if ((n.basePose === 'normal' || n.temper !== 'calm') && n.model.root.visible) list.push(n);
     for (const a of this.patrols.actors) if (a.isAlive() && a.model.root.visible) list.push(a);
+    for (const a of this.castle.actors) if (a.isAlive()) list.push(a);
     for (let i = 0; i < list.length; i++) {
       const a = list[i].position;
       for (let j = i + 1; j < list.length; j++) {
@@ -1502,6 +1549,7 @@ export class Game {
     for (const c of this.companions) c.render(alpha, frameDt);
     for (const n of this.npcs.values()) n.render(alpha, frameDt);
     for (const a of this.patrols.actors) if (a.model.root.visible) a.render(alpha, frameDt);
+    for (const a of this.castle.actors) if (a.model.root.visible) a.render(alpha, frameDt);
     this.ambush.render(alpha, frameDt, this.time);
     this.town.render(alpha, frameDt);
     this.bear?.render(alpha, frameDt);
@@ -1600,7 +1648,7 @@ export class Game {
     ];
     if (this.quests.reached('c5_zariad')) markers.push({ x: LOC.ukryt.x, z: LOC.ukryt.z, color: '#ff8a2a', label: 'Úkryt', size: 5 });
     if (this.bear) markers.push({ x: this.bear.position.x, z: this.bear.position.z, color: '#5a3a22', label: 'Medveď', size: 5 });
-    markers.push(...this.patrols.markers());
+    markers.push(...this.patrols.markers(), ...this.castle.markers());
     for (const g of this.town.guards) if (g.alerted && g.isAlive()) markers.push({ x: g.position.x, z: g.position.z, color: '#2c3e66', size: 3 });
     for (const c of this.companions) markers.push({ x: c.position.x, z: c.position.z, color: '#ece3d0', size: 3 });
     if (this.ambush.coach) markers.push({ x: this.ambush.coach.position.x, z: this.ambush.coach.position.z, color: '#d8432f', label: 'Panský koč', size: 6 });

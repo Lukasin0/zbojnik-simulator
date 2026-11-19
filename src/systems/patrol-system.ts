@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PATROLS, PATROL_TUNING as P, type PatrolDef } from '@/config/constants';
+import { PATROLS, PATROL_TUNING as P, STEALTH, type PatrolDef } from '@/config/constants';
 import type { Actor } from '@/entities/actor';
 import { Pandur } from '@/entities/enemy';
 import { BAND_LOOKS, DRAB } from '@/entities/looks';
@@ -15,6 +15,8 @@ export interface PatrolContext {
   /** 0 day … 1 night */
   night: number;
   disguised: boolean;
+  /** the captain sneaks (C) – drábi spot him later */
+  crouching: boolean;
   /** drábi only walk the valley once the story has made the captain known */
   drabiActive: boolean;
   hour: number;
@@ -153,7 +155,9 @@ export class PatrolSystem {
       // spot the zbojníci – or notice being hit
       const sight = ctx.disguised ? P.sightDisguised : lerp(P.sightDay, P.sightNight, ctx.night);
       const alive = g.members.filter((m) => m.isAlive());
-      const seen = alive.some((m) => ctx.zbojnici.some((z) => z.isAlive() && z.position.distanceTo(m.position) < sight));
+      const seen = alive.some((m) =>
+        ctx.zbojnici.some((z) => z.isAlive() && z.position.distanceTo(m.position) < sight * (z === ctx.player && ctx.crouching ? STEALTH.crouchSight : 1)),
+      );
       const hurt = alive.some((m) => m.hp < m.maxHp);
       const bandNear = alive.some((m) => targets.some((t) => t.faction === 'band' && t.position.distanceTo(m.position) < sight * 0.8));
       if (seen || hurt || bandNear) {

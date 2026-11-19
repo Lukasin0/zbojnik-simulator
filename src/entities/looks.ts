@@ -338,6 +338,15 @@ export const DRAB: CharacterLook = {
   weapon: 'saber',
 };
 
+/** Hradná stráž of Likava – blue-grey coats, šako, a lantern after dark. */
+export const CASTLE_GUARD: CharacterLook = {
+  ...PANDUR,
+  coat: 0x3a4652,
+  pants: 0x2a2a30,
+  trim: 0xb8bcc2,
+  lantern: true,
+};
+
 /** Men of other zbojnícke partie roaming the hills – same folk dress, different vests and hair. */
 export const BAND_LOOKS: CharacterLook[] = [
   { ...JANOSIK, hair: 0x4a3020, vest: 0x3c5a2a, vestTrim: 0xd8b440, braids: true, pistol: false, mustache: true },

@@ -235,10 +235,12 @@ export class Hud {
 
   /** null hides the emote menu. */
   /** Town guards' suspicion meter (null hides it). */
-  setSuspicion(v: number | null): void {
-    const key = v === null ? 'off' : (Math.round(v * 20) / 20).toFixed(2);
+  setSuspicion(v: number | null, label = 'Podozrenie'): void {
+    const key = v === null ? 'off' : `${label}${(Math.round(v * 20) / 20).toFixed(2)}`;
     if (!this.changed('suspicion', key)) return;
     this.suspicion.classList.toggle('show', v !== null);
+    const span = this.suspicion.querySelector('span');
+    if (span && span.textContent !== label) span.textContent = label;
     const bar = this.suspicion.querySelector('i');
     if (bar && v !== null) bar.style.width = `${Math.round(Math.min(1, v) * 100)}%`;
   }

@@ -20,6 +20,8 @@ interface DebugCommands {
   pose(kind: AttackAnim | null, t?: number): string;
   face(yaw: number): string;
   zoom(distance: number): string;
+  castle(): unknown;
+  door(id: string, open: boolean): string;
   state(): unknown;
   pools(): unknown;
   npcs(): unknown;
@@ -119,6 +121,12 @@ export function installDebugTools(game: Game, loop: GameLoop): void {
     pose(kind, t = 0.5) {
       game.debugPose = kind ? { kind, t } : null;
       return kind ? `póza ${kind} @ ${t}` : 'póza vypnutá';
+    },
+    castle() {
+      return game.castle.snapshot();
+    },
+    door(id, open) {
+      return game.world.setDoor(id, open) ? `dvere ${id}: ${open ? 'otvorené' : 'zatvorené'}` : 'neznáme dvere';
     },
     zoom(d) {
       // debug only: reach into the camera's private target distance for close-up screenshots

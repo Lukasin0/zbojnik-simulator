@@ -61,6 +61,21 @@ export class Pandur extends Actor {
     this.hp = this.maxHp;
   }
 
+  /** Not fighting – a sneak blow from behind can drop him silently. */
+  get unaware(): boolean {
+    return this.state === 'idle' || this.state === 'escort' || this.state === 'sleepy';
+  }
+
+  /** Silent takedown: down at once, no fight, no shout. */
+  knockOut(from: THREE.Vector3): void {
+    if (this.state === 'dead') return;
+    this.hp = 0;
+    this.state = 'dead';
+    this.pose = 'dead';
+    this.attackT = -1;
+    this.knockback(from, 1.5);
+  }
+
   /** Back on duty (patrols respawn their fallen drábi). */
   revive(): void {
     this.state = 'idle';

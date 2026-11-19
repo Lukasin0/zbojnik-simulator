@@ -44,6 +44,12 @@ User speaks Slovak; reply in Slovak. All in-game text is Slovak.
   + friendly zbojník bands (Npc with faction 'band', help vs alerted drábi). `entities/melee-brain.ts` – shared
   chase/windup/strike AI. `Npc` temper: calm → warned (1st hit) → hostile (2nd) → down (KO) + grudge; factions
   'civil'/'band' are hittable by the player. Player `armed` / R draws the valaška (`CharacterModel.setSheathed`).
+- `systems/castle-system.ts` – Likava guards (Pandur, CASTLE_GUARD look with left-hand lantern): rounds/posts,
+  vision cones (ground sector meshes), detection → investigate → alarm (also on finding a KO'd comrade), calm,
+  respawn, one shared lantern PointLight. Castle geometry + colliders: `createCastle()` in props.ts (castle-local),
+  `World.buildCastle`, cell doors `World.setDoor('cell0'..'cell2', open)` (switchable colliders, `off` flag),
+  `World.lineClear()` for sight. Player `crouching` (C/Ctrl), `Game.sneakTakedowns()` = crouched blow from behind
+  on an `unaware` Pandur → `knockOut()`. Debug: `zbojnik.castle()`, `zbojnik.door(id, open)`.
 - `story/dialogs.ts` – `createNpcs`, `createInteractables` (all E‑interactions: NPC talk, ladders, hideout,
   signposts, chests, coach loot…), dialog trees, `CHODNIKY`. `story/lines.ts` – barks and flavour text.
   `Interactable.lowPriority` = loses focus to anything else in reach.
@@ -69,7 +75,7 @@ Graphics sessions should stay cheap and art‑direction driven (the final look c
   warmer golden hour / bluer night tuning, shadow cascade-ish follow (tighter extent near player).
 - [x] **S3 Grafika – postavy.** Files: `components/character-model.ts`, `entities/looks.ts`. Goals: better
   proportions, faces (eyes, mustache), cloth details (opasok, krpce, vest embroidery), smoother pose blending.
-- [ ] **S4 Kapitola 6a – Likavský hrad.** Files: `world/world.ts` (new `buildCastleInterior`), `world/props.ts`,
+- [x] **S4 Kapitola 6a – Likavský hrad.** Files: `world/world.ts` (new `buildCastleInterior`), `world/props.ts`,
   `entities/enemy.ts`. Goals: walkable castle (courtyard, gate, dungeon), night guards with lanterns on
   patrol routes, vision cones / detection meter (reuse town-system suspicion idea).
 - [ ] **S5 Kapitola 6b – príbeh a kľúče.** Files: `systems/quest-system.ts`, `types/game-types.ts`,
@@ -99,3 +105,8 @@ Graphics sessions should stay cheap and art‑direction driven (the final look c
   spin raw). GDD §3.5 now has a character art bible for the Unity port. Debug `zbojnik.zoom(d)` added.
   **Art direction:** the final AAA look is made in Unity – keep web-prototype art cheap and data-driven
   (`CharacterLook` fields = modular costume parts), document intent in the GDD instead of polishing meshes.
+- 2026-11-19 S4: walkable Likava (walls, towers, east gate + road through the forest, north-wall breach, palác,
+  strážnica, stable, 3 barred cells), 7 guards with lanterns at night, vision cones + "Odhalenie" HUD meter,
+  investigate/alarm/calm/respawn, crouch + silent takedown (works on all pandúri/drábi). Castle drábi patrol moved
+  east of the walls. Headless-Edge checked: no errors, crouched at 6 m at night = unseen, standing = alarm;
+  detection gain then lowered (0.3 + 1.3·closeness). S5 needs: quest steps, keys → `setDoor`, prisoners in cells.

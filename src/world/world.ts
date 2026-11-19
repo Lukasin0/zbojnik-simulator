@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { BOUNDS_MARGIN, BROKEN_LADDER, GORGE, GORGE_STEPS, LOC, REGIONS, WATER_LEVEL, WORLD_SIZE } from '@/config/constants';
+import { BOUNDS_MARGIN, BROKEN_LADDER, CASTLE, GORGE, GORGE_STEPS, LOC, REGIONS, WATER_LEVEL, WORLD_SIZE } from '@/config/constants';
 import type { GroundProvider } from '@/components/physics-body';
 import { lerp, mulberry32, randRange, smoothstep } from '@/utils/math-utils';
 import { bakeStatic, mat } from './materials';
 import { Mist } from './mist';
 import type { NightReceiver } from './day-night';
-import { Terrain, forestNoise, gorgeAt, gorgeFloor, isMud, outsideDistance, pathDistance, riverZ, roadZ } from './terrain';
+import { Terrain, forestNoise, gorgeAt, onCastleRoad, gorgeFloor, isMud, outsideDistance, pathDistance, riverZ, roadZ } from './terrain';
 import { Vegetation, applyWind, windDepthMaterial, type WindOptions } from './vegetation';
 import {
   createBarrel,
@@ -17,6 +17,7 @@ import {
   createLadder,
   createLeanTo,
   createCastle,
+  createCellDoor,
   createChest,
   createChurch,
   createFenceRing,
@@ -43,6 +44,7 @@ import { AmbushTree, ShootingTarget, TrainingDummy } from './interactive-props';
 
 interface CircleCollider {
   kind: 'circle';
+  off?: boolean;
   x: number;
   z: number;
   r: number;
@@ -50,6 +52,8 @@ interface CircleCollider {
 
 interface BoxCollider {
   kind: 'box';
+  /** switched off (an open door) */
+  off?: boolean;
   minX: number;
   maxX: number;
   minZ: number;
@@ -134,6 +138,10 @@ export class World implements GroundProvider, NightReceiver {
   /** Meshes the third-person camera must stay in front of. */
   readonly occluders: THREE.Object3D[] = [];
   readonly mist: Mist;
+  /** Castle doors by id (cell0–cell2) – see setDoor(). */
+  private readonly castleDoors = new Map<string, { pivot: THREE.Group; collider: BoxCollider; open: boolean }>();
+  /** Brazier flames on Likava (no lights – they glow through bloom). */
+  private readonly braziers: THREE.Group[] = [];
   /** Grass, wildflowers and the wind uniforms shared by all vegetation. */
   readonly vegetation = new Vegetation();
   /** Where each villager goes to bed – a spot just outside their door. */
@@ -254,14 +262,25 @@ export class World implements GroundProvider, NightReceiver {
   }
 
   /** Axis aligned box centred at x/z; w along X, d along Z (after rotation). */
-  addBox(x: number, z: number, w: number, d: number): void {
+  addBox(x: number, z: number, w: number, d: number): BoxCollider {
     const c: BoxCollider = { kind: 'box', minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 };
     this.colliders.push(c);
     this.index(c, this.colliders.length - 1);
+    return c;
   }
 
   groundHeight(x: number, z: number): number {
     return this.terrain.height(x, z);
+  }
+
+  /** Line of sight on the ground plane: no wall, tree or prop collider between the two points. */
+  lineClear(ax: number, az: number, bx: number, bz: number): boolean {
+    const len = Math.hypot(bx - ax, bz - az);
+    for (let s = 0.7; s < len - 0.6; s += 0.5) {
+      const t = s / len;
+      if (this.isBlocked(ax + (bx - ax) * t, az + (bz - az) * t, 0)) return false;
+    }
+    return true;
   }
 
   /** True if any collider (grown by `pad`) covers the point – used to keep grass out of houses. */
@@ -272,6 +291,7 @@ export class World implements GroundProvider, NightReceiver {
     }
     for (const i of near) {
       const c = this.colliders[i];
+      if (c.off) continue;
       if (c.kind === 'circle') {
         if (Math.hypot(x - c.x, z - c.z) < c.r + pad) return true;
       } else if (x > c.minX - pad && x < c.maxX + pad && z > c.minZ - pad && z < c.maxZ + pad) return true;
@@ -295,6 +315,7 @@ export class World implements GroundProvider, NightReceiver {
     }
     for (const i of near) {
       const c = this.colliders[i];
+      if (c.off) continue;
       if (c.kind === 'circle') {
         const dx = p.x - c.x;
         const dz = p.z - c.z;
@@ -806,7 +827,47 @@ export class World implements GroundProvider, NightReceiver {
 
   private buildCastle(): void {
     const c = LOC.castle;
-    this.place(createCastle(), c.x, c.z, 0, 17, 15, 0.5);
+    const h = this.groundHeight(c.x, c.z);
+    const build = createCastle();
+    const baked = bakeStatic(build.group);
+    baked.position.set(c.x, h - 0.05, c.z);
+    this.root.add(baked);
+    baked.children.forEach((m) => this.occluders.push(m));
+    for (const [x, z, w, d] of build.boxes) this.addBox(c.x + x, c.z + z, w, d);
+    for (const [x, z, r] of build.circles) this.addCircle(c.x + x, c.z + z, r);
+    for (const b of build.braziers) {
+      const f = createFlame();
+      f.scale.setScalar(0.32);
+      f.position.set(c.x + b.x, h + b.y, c.z + b.z);
+      this.root.add(f);
+      this.braziers.push(f);
+    }
+    // barred cell doors – locked until the story (kapitola 6) hands over the keys
+    CASTLE.cells.forEach(([x0, x1], i) => this.addDoor(`cell${i}`, createCellDoor(1.2), c.x + (x0 + x1) / 2, c.z + CASTLE.cellFront, 1.2, h));
+  }
+
+  /** Hinged door with a collider that disappears while it stands open. */
+  private addDoor(id: string, door: THREE.Group, x: number, z: number, w: number, y: number): void {
+    const pivot = new THREE.Group();
+    pivot.position.set(x - w / 2, y, z);
+    door.position.x = w / 2;
+    pivot.add(door);
+    this.root.add(pivot);
+    this.castleDoors.set(id, { pivot, collider: this.addBox(x, z, w, 0.25), open: false });
+  }
+
+  /** Open / close a door (cell doors `cell0`–`cell2`). Returns false for an unknown id. */
+  setDoor(id: string, open: boolean): boolean {
+    const d = this.castleDoors.get(id);
+    if (!d) return false;
+    d.open = open;
+    d.collider.off = open;
+    d.pivot.rotation.y = open ? 1.75 : 0;
+    return true;
+  }
+
+  isDoorOpen(id: string): boolean {
+    return this.castleDoors.get(id)?.open ?? false;
   }
 
   private buildRoadside(): void {
@@ -826,12 +887,13 @@ export class World implements GroundProvider, NightReceiver {
     if (Math.abs(z - roadZ(x)) < 9) return true;
     if (Math.abs(z - riverZ(x)) < 15) return true;
     if (pathDistance(x, z) < 3) return true;
+    if (onCastleRoad(x, z, 4)) return true;
     const spots: [number, number, number][] = [
       [LOC.village.x, LOC.village.z, 60],
       [LOC.vatra.x, LOC.vatra.z, 26],
       [LOC.salas.x + 4, LOC.salas.z, 24],
       [LOC.terchova.x, LOC.terchova.z, 22],
-      [LOC.castle.x, LOC.castle.z, 18],
+      [LOC.castle.x, LOC.castle.z, 30],
       [LOC.ambushX, roadZ(LOC.ambushX) - 5.5, 4],
       [LOC.mikulas.x, LOC.mikulas.z, 62],
       [LOC.hana.x, LOC.hana.z, 12],
@@ -999,6 +1061,11 @@ export class World implements GroundProvider, NightReceiver {
       f.light.intensity = f.base * flicker * (0.6 + this.night * 1.4);
       f.flame.scale.set(f.size * (0.9 + flicker * 0.15), f.size * (0.8 + flicker * 0.3), f.size * (0.9 + flicker * 0.15));
       f.flame.rotation.y += dt * 2;
+    }
+    for (let i = 0; i < this.braziers.length; i++) {
+      const f = this.braziers[i];
+      const k = 0.32 * (0.9 + Math.sin(time * 11 + i * 2.1) * 0.07 + Math.sin(time * 23 + i) * 0.05);
+      f.scale.set(k, k * (1 + Math.sin(time * 17 + i) * 0.12), k);
     }
     for (const d of this.dummies) d.update(dt, time);
     for (const t of this.targets) t.update(dt);

@@ -16,6 +16,8 @@ export interface PlayerIntent {
   shoot: boolean;
   /** Draw / sheathe the valaška (R). */
   draw: boolean;
+  /** Toggle sneaking (C / Ctrl). */
+  crouch: boolean;
   aimYaw: number;
 }
 
@@ -36,6 +38,7 @@ export class PlayerInputHandler {
         aim: false,
         shoot: false,
         draw: false,
+        crouch: false,
         aimYaw: cameraYaw,
       };
     }
@@ -59,6 +62,7 @@ export class PlayerInputHandler {
       aim: this.input.isDown('shoot'),
       shoot: this.input.justReleased('shoot'),
       draw: this.input.justPressed('draw'),
+      crouch: this.input.justPressed('crouch'),
       aimYaw: cameraYaw,
     };
   }

@@ -171,7 +171,7 @@ export interface PatrolDef {
 
 export const PATROLS: PatrolDef[] = [
   // the castle guard walking round Likava
-  { kind: 'drabi', size: 3, route: [[-124, -12], [-120, 22], [-140, 33], [-153, 16], [-150, -6]] },
+  { kind: 'drabi', size: 3, route: [[-114, -20], [-102, 8], [-114, 36], [-98, 22], [-98, -6]] },
   // castle → past the salaš → towards the village and back
   { kind: 'drabi', size: 3, route: [[-128, 42], [-104, 78], [-60, 82], [-36, 58], [-58, 28], [-100, 22]] },
   // forest east of the village
@@ -197,6 +197,78 @@ export const PATROL_TUNING = {
   respawn: 360,
   /** friendly zbojníci join a fight with drábi within this distance */
   helpDistance: 22,
+} as const;
+
+// --- Likavský hrad (kapitola 6) ------------------------------------------------
+/**
+ * Castle layout in local metres around LOC.castle (x = east, z = south). The gate faces east towards the
+ * valley; a breach in the north wall is the sneaky way in; the žalár (3 cells) lies along the south wall.
+ */
+export const CASTLE = {
+  halfX: 15,
+  halfZ: 13,
+  wallThick: 1.6,
+  wallHeight: 7,
+  /** gate opening in the east wall: z from -gateHalf to +gateHalf */
+  gateHalf: 2.2,
+  /** breach in the north wall: x range */
+  breach: [3, 5.6] as [number, number],
+  /** cells along the south wall: x ranges, front bars at z = cellFront */
+  cells: [
+    [-12, -8.4],
+    [-8.4, -4.8],
+    [-4.8, -1.2],
+  ] as [number, number][],
+  cellFront: 8,
+} as const;
+
+export interface CastleGuardDef {
+  /** waypoints in castle-local metres; one point = a fixed post */
+  route: [number, number][];
+  /** facing at a post (radians, 0 = +z / south, PI/2 = east) */
+  yaw?: number;
+}
+
+export const CASTLE_GUARDS: CastleGuardDef[] = [
+  // courtyard round
+  { route: [[8, -5], [-2, -6], [-2, 4], [8, 4]] },
+  // the cells' warden – watches the courtyard
+  { route: [[-6, 5.6]], yaw: Math.PI },
+  // gate guards outside the east gate
+  { route: [[17.6, -2.8]], yaw: Math.PI / 2 },
+  { route: [[17.6, 2.8]], yaw: Math.PI / 2 },
+  // the palác door
+  { route: [[-2.6, -6.8]], yaw: Math.PI / 2 },
+  // outside rounds along the north and the south wall
+  { route: [[19, -16.5], [-11, -16.5]] },
+  { route: [[19, 16.5], [-11, 17.5]] },
+];
+
+export const STEALTH = {
+  /** guard sight range by day / at night (metres) */
+  sightDay: 16,
+  sightNight: 9.5,
+  /** a lantern lights anyone this close at night */
+  lanternRadius: 4.5,
+  /** half-angle of the vision cone */
+  fov: 0.95,
+  /** crouching shrinks the distance you are seen at */
+  crouchSight: 0.6,
+  crouchSpeed: 0.5,
+  /** detection gain per second: base + near * (1 - d / range) */
+  gainBase: 0.3,
+  gainNear: 1.3,
+  decay: 0.22,
+  /** above this a guard leaves his round to have a look */
+  investigate: 0.45,
+  /** guards this close to the one who raises the alarm join in */
+  alarmRadius: 38,
+  /** alarm ends when the zbojník stays this far from the castle for `calmTime` s */
+  calmDistance: 60,
+  calmTime: 12,
+  /** knocked-out guards are replaced after this long (when nobody watches) */
+  respawn: 600,
+  walkSpeed: 1.4,
 } as const;
 
 export const COACH_SPEED = 3.6;

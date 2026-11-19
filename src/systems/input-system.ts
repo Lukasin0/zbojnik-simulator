@@ -19,6 +19,7 @@ export type Action =
   | 'map'
   | 'disguise'
   | 'draw'
+  | 'crouch'
   | 'confirm';
 
 const KEY_BINDINGS: Record<Action, readonly string[]> = {
@@ -42,6 +43,7 @@ const KEY_BINDINGS: Record<Action, readonly string[]> = {
   map: ['KeyM'],
   disguise: ['KeyH'],
   draw: ['KeyR'],
+  crouch: ['KeyC', 'ControlLeft'],
   confirm: ['Enter', 'Space'],
 };
 

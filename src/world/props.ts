@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { CASTLE } from '@/config/constants';
 import { at, mat, part, signTexture } from './materials';
 
 export const WOOD = 0x6b4a2f;
@@ -478,27 +479,177 @@ export function createChest(): THREE.Group {
   return g;
 }
 
-export function createCastle(): THREE.Group {
+/** Static castle geometry plus its colliders (castle-local, x east, z south). */
+export interface CastleBuild {
+  group: THREE.Group;
+  /** [centerX, centerZ, width (x), depth (z)] */
+  boxes: [number, number, number, number][];
+  /** [x, z, r] */
+  circles: [number, number, number][];
+  /** spots for brazier flames (y = top of the bowl) */
+  braziers: THREE.Vector3[];
+}
+
+const CASTLE_STONE = 0x8f8a80;
+const CASTLE_STONE_DARK = 0x77726a;
+const CASTLE_ROOF = 0x3d3a35;
+
+/**
+ * Hrad Likava: curtain walls with merlons, four corner towers, an east gatehouse, a breach in the north
+ * wall, the palác (keep), strážnica, stable with hay and the žalár – three cells along the south wall.
+ * Cell doors are NOT included (see createCellDoor) so the story can open them.
+ */
+export function createCastle(): CastleBuild {
+  const { halfX: HX, halfZ: HZ, wallThick: T, wallHeight: H, gateHalf: GH, breach, cells, cellFront } = CASTLE;
   const g = new THREE.Group();
-  const stone = 0x8f8a80;
-  const wallSeg = (x: number, z: number, w: number, d: number, h: number): void => {
-    g.add(at(part(new THREE.BoxGeometry(w, h, d), stone), x, h / 2, z));
-    for (let i = -w / 2 + 0.5; i < w / 2; i += 1.4) {
-      if (w > d) g.add(at(part(new THREE.BoxGeometry(0.7, 0.7, d), stone), x + i, h + 0.35, z));
+  const boxes: CastleBuild['boxes'] = [];
+  const circles: CastleBuild['circles'] = [];
+  const box = (w: number, h: number, d: number, x: number, y: number, z: number, color = CASTLE_STONE): void => {
+    g.add(at(part(new THREE.BoxGeometry(w, h, d), color), x, y, z));
+  };
+  const solid = (w: number, h: number, d: number, x: number, z: number, color = CASTLE_STONE): void => {
+    box(w, h, d, x, h / 2, z, color);
+    boxes.push([x, z, w, d]);
+  };
+  // wall segment along X (z fixed) or along Z (x fixed), with merlons on the outer edge
+  const wallX = (x0: number, x1: number, z: number, out: number): void => {
+    const len = x1 - x0;
+    solid(len, H, T, (x0 + x1) / 2, z);
+    for (let x = x0 + 0.5; x < x1 - 0.3; x += 1.5) box(0.75, 0.85, T * 0.45, x, H + 0.42, z + out * T * 0.28);
+  };
+  const wallZ = (z0: number, z1: number, x: number, out: number): void => {
+    const len = z1 - z0;
+    solid(T, H, len, x, (z0 + z1) / 2);
+    for (let z = z0 + 0.5; z < z1 - 0.3; z += 1.5) box(T * 0.45, 0.85, 0.75, x + out * T * 0.28, H + 0.42, z);
+  };
+  wallX(-HX, breach[0], -HZ, -1);
+  wallX(breach[1], HX, -HZ, -1);
+  wallX(-HX, HX, HZ, 1);
+  wallZ(-HZ, HZ, -HX, -1);
+  wallZ(-HZ, -GH, HX, 1);
+  wallZ(GH, HZ, HX, 1);
+  // a plinth darkens the foot of the walls (reads as weathering)
+  box(2 * HX + T, 0.6, T + 0.3, 0, 0.3, HZ, CASTLE_STONE_DARK);
+  box(T + 0.3, 0.6, 2 * HZ + T, -HX, 0.3, 0, CASTLE_STONE_DARK);
+
+  // corner towers
+  for (const [x, z] of [[-HX, -HZ], [HX, -HZ], [-HX, HZ], [HX, HZ]]) {
+    g.add(at(part(new THREE.CylinderGeometry(2.4, 2.8, 11, 10), CASTLE_STONE), x, 5.5, z));
+    g.add(at(part(new THREE.ConeGeometry(3.1, 4, 10), CASTLE_ROOF), x, 13, z));
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + 0.4;
+      box(0.18, 0.7, 0.4, x + Math.cos(a) * 2.42, 7.5, z + Math.sin(a) * 2.42, 0x23262a);
     }
-  };
-  wallSeg(0, -7, 16, 1.4, 7);
-  wallSeg(0, 7, 16, 1.4, 6);
-  wallSeg(-8, 0, 1.4, 14, 7.5);
-  wallSeg(8, 0, 1.4, 14, 5);
-  const tower = (x: number, z: number, h: number): void => {
-    g.add(at(part(new THREE.CylinderGeometry(2.2, 2.5, h, 8), stone), x, h / 2, z));
-    g.add(at(part(new THREE.ConeGeometry(2.8, 3.5, 8), 0x3d3a35), x, h + 1.75, z));
-  };
-  tower(-8, -7, 12);
-  tower(8, 7, 9);
-  g.add(at(part(new THREE.BoxGeometry(6, 14, 6), 0x9a958a), 2, 7, -2));
-  g.add(at(part(roofPrism(6.6, 3, 6.6), 0x3d3a35), 2, 14, -2));
+    circles.push([x, z, 2.8]);
+  }
+  // gatehouse: two square towers and an arch over the opening
+  for (const s of [-1, 1]) {
+    solid(3.2, 9.5, 3.2, HX + 0.4, s * (GH + 1.6));
+    box(3.6, 0.9, 3.6, HX + 0.4, 9.9, s * (GH + 1.6), CASTLE_STONE_DARK);
+  }
+  box(T + 0.6, 2.4, 2 * GH, HX, 6.6, 0);
+  box(T + 0.8, 0.5, 2 * GH + 0.4, HX, 5.2, 0, CASTLE_STONE_DARK);
+  // raised portcullis peeking out under the arch
+  for (let i = 0; i < 6; i++) box(0.08, 1.2, 0.08, HX + 0.5, 5.6, -GH + 0.4 + i * 0.75, 0x2a2622);
+
+  // breach: tumbled stones in and out
+  const rubble: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 9; i++) {
+    const s = 0.35 + (i % 3) * 0.18;
+    rubble.push(new THREE.DodecahedronGeometry(s, 0).translate(breach[0] + 0.3 + ((i * 0.37) % 2.2), s * 0.5, -HZ + (i % 2 ? -1.4 : 1.2) + (i % 3) * 0.3));
+  }
+  g.add(part(mergeGeometries(rubble, false) ?? rubble[0], CASTLE_STONE_DARK));
+  box(breach[1] - breach[0], 0.6, T, (breach[0] + breach[1]) / 2, 0, -HZ, CASTLE_STONE_DARK);
+
+  // palác (keep) in the north-west corner, door facing east
+  const kx0 = -HX + T / 2 + 0.2;
+  const kx1 = -4.4;
+  const kz0 = -HZ + T / 2 + 0.2;
+  const kz1 = -3.8;
+  const kw = kx1 - kx0;
+  const kd = kz1 - kz0;
+  solid(kw, 12, kd, (kx0 + kx1) / 2, (kz0 + kz1) / 2, 0x9a958a);
+  g.add(at(part(roofPrism(kw + 0.6, 3.4, kd + 0.6), CASTLE_ROOF), (kx0 + kx1) / 2, 12, (kz0 + kz1) / 2));
+  for (let i = 0; i < 3; i++) {
+    for (const y of [4.5, 8.5]) box(0.12, 1.1, 0.7, kx1 + 0.04, y, kz0 + 1.6 + i * 2.2, 0x23262a);
+  }
+  box(0.2, 2.4, 1.5, kx1 + 0.08, 1.2, -6.8, 0x4a3220);
+  // red & gold banner over the door
+  box(0.06, 2.2, 1.1, kx1 + 0.12, 6.6, -6.8, 0xb3261e);
+  box(0.07, 2.2, 0.3, kx1 + 0.13, 6.6, -6.8, 0xd8b440);
+
+  // strážnica (guard house) against the south wall, east of the cells
+  const gx0 = 5.5;
+  const gx1 = HX - T / 2;
+  const gz0 = 7.4;
+  const gz1 = HZ - T / 2;
+  solid(gx1 - gx0, 4.4, gz1 - gz0, (gx0 + gx1) / 2, (gz0 + gz1) / 2, 0xb0a894);
+  g.add(at(part(roofPrism(gx1 - gx0 + 0.6, 2, gz1 - gz0 + 0.6), ROOF), (gx0 + gx1) / 2, 4.4, (gz0 + gz1) / 2));
+  box(1.1, 2.1, 0.12, 8, 1.05, gz0 - 0.05, WOOD_DARK);
+
+  // stable with hay along the north wall (good cover right next to the breach)
+  for (const x of [7, 10.2, 13.4]) {
+    g.add(at(part(new THREE.CylinderGeometry(0.1, 0.12, 3, 6), WOOD_DARK), x, 1.5, -8.6));
+    circles.push([x, -8.6, 0.2]);
+  }
+  g.add(at(part(new THREE.BoxGeometry(7, 0.15, 4.2), ROOF), 10.2, 3.1, -10.4, -0.22, 0, 0));
+  for (const [x, z, h] of [[8.4, -10.6, 1.2], [11.6, -10.6, 1.2], [10, -10.9, 2.3]]) {
+    box(2.6, 1.1, 1.4, x, h - 0.55, z, 0xc8b060);
+  }
+  boxes.push([10, -10.7, 5.8, 1.6]);
+
+  // žalár: three cells under a lean-to roof, stone partitions, iron bars in front (doors separate)
+  const backZ = HZ - T / 2;
+  const depth = backZ - cellFront;
+  for (const xs of [cells[0][0], ...cells.map((c) => c[1])]) solid(0.3, 3, depth, xs, cellFront + depth / 2);
+  g.add(at(part(new THREE.BoxGeometry(cells[2][1] - cells[0][0] + 0.8, 0.14, depth + 0.9), ROOF), (cells[0][0] + cells[2][1]) / 2, 3.4, cellFront + depth / 2 - 0.2, 0.18, 0, 0));
+  const bars: THREE.BufferGeometry[] = [];
+  for (const [x0, x1] of cells) {
+    const mid = (x0 + x1) / 2;
+    for (const [a, b] of [[x0 + 0.15, mid - 0.6], [mid + 0.6, x1 - 0.15]]) {
+      for (let x = a; x <= b + 0.01; x += 0.2) bars.push(new THREE.CylinderGeometry(0.025, 0.025, 2.6, 5).translate(x, 1.3, cellFront));
+      boxes.push([(a + b) / 2, cellFront, b - a + 0.1, 0.25]);
+    }
+    bars.push(new THREE.BoxGeometry(x1 - x0 - 0.3, 0.08, 0.08).translate(mid, 2.55, cellFront));
+    bars.push(new THREE.BoxGeometry(x1 - x0 - 0.3, 0.08, 0.08).translate(mid, 0.1, cellFront));
+    // straw on the cell floor
+    box(x1 - x0 - 0.8, 0.08, 1.4, mid, 0.04, backZ - 1, 0xb8a058);
+  }
+  g.add(part(mergeGeometries(bars.map((b) => (b.index ? b.toNonIndexed() : b)), false) ?? bars[0], 0x2a2622, { metalness: 0.6, roughness: 0.5 }));
+
+  // well and braziers in the courtyard
+  const well = createWell();
+  well.position.set(3, 0, -0.5);
+  g.add(well);
+  circles.push([3, -0.5, 1.15]);
+  const braziers: THREE.Vector3[] = [];
+  for (const [x, z] of [[12.4, -3.6], [12.4, 3.6], [1.5, 6.2]]) {
+    g.add(at(part(new THREE.CylinderGeometry(0.08, 0.1, 1.1, 6), 0x2a2622), x, 0.55, z));
+    g.add(at(part(new THREE.CylinderGeometry(0.42, 0.25, 0.32, 8), 0x2a2622, { metalness: 0.5 }), x, 1.2, z));
+    braziers.push(new THREE.Vector3(x, 1.3, z));
+    circles.push([x, z, 0.4]);
+  }
+  // barrels and crates by the guard house
+  for (const [x, z] of [[4.4, 9.4], [4.6, 10.8], [3.4, 10.2]]) {
+    const b = createBarrel();
+    b.position.set(x, 0, z);
+    g.add(b);
+  }
+  circles.push([4.2, 10.1, 1.0]);
+  box(1, 0.8, 1, 13, 0.4, 5.8, WOOD);
+  box(0.8, 0.6, 0.8, 13, 1.1, 5.8, WOOD_DARK);
+  boxes.push([13, 5.8, 1, 1]);
+  return { group: g, boxes, circles, braziers };
+}
+
+/** Barred cell door (hinged at its local x = -w/2). */
+export function createCellDoor(w = 1.2): THREE.Group {
+  const g = new THREE.Group();
+  const geos: THREE.BufferGeometry[] = [];
+  for (let x = 0.1; x < w; x += 0.2) geos.push(new THREE.CylinderGeometry(0.025, 0.025, 2.4, 5).translate(x - w / 2, 1.3, 0).toNonIndexed());
+  for (const y of [0.25, 1.3, 2.45]) geos.push(new THREE.BoxGeometry(w, 0.07, 0.07).translate(0, y, 0).toNonIndexed());
+  geos.push(new THREE.BoxGeometry(0.1, 0.16, 0.12).translate(w / 2 - 0.12, 1.15, 0.05).toNonIndexed());
+  g.add(part(mergeGeometries(geos, false) ?? geos[0], 0x34302a, { metalness: 0.6, roughness: 0.5 }));
   return g;
 }
 

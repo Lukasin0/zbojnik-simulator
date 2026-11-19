@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PLAYER_TUNING as T } from '@/config/constants';
+import { PLAYER_TUNING as T, STEALTH } from '@/config/constants';
 import type { GroundProvider } from '@/components/physics-body';
 import type { PlayerIntent } from '@/components/input-handler';
 import type { HitSource } from '@/systems/combat-system';
@@ -59,6 +59,9 @@ export class Player extends Actor {
   private drawTo = false;
   /** Attack clicked while the valaška was still behind the belt – swing as soon as it is out. */
   private pendingAttack: 'light' | 'heavy' | null = null;
+  /** Sneaking (C): slower, harder to spot, a blow from behind knocks an unaware guard out. */
+  crouching = false;
+  private crouchT = 0;
 
   constructor(parent: THREE.Object3D) {
     super(JANOSIK, parent, T.baseHp);
@@ -108,7 +111,7 @@ export class Player extends Actor {
   }
 
   protected override animParams(): AnimParams {
-    return { ...super.animParams(), draw: this.drawT };
+    return { ...super.animParams(), draw: this.drawT, crouch: this.crouchT };
   }
 
   get attacking(): boolean {
@@ -167,6 +170,10 @@ export class Player extends Actor {
     if (world.isMud(p.x, p.z)) speedMul *= this.krpce ? T.mudSlowKrpce : T.mudSlow;
     if (world.waterDepth(p.x, p.z) > 0.3) speedMul *= T.waterSlow;
     if (this.krpce) speedMul *= 1.08;
+    if (intent.crouch) this.crouching = !this.crouching;
+    if (intent.sprint && moving) this.crouching = false;
+    if (this.crouching) speedMul *= STEALTH.crouchSpeed;
+    this.crouchT = damp(this.crouchT, this.crouching ? 1 : 0, 10, dt);
     if (this.attacking) speedMul *= 0.35;
     this.aiming = intent.aim && !this.attacking;
     if (this.aiming) {
@@ -190,6 +197,7 @@ export class Player extends Actor {
     }
 
     if (intent.jump && this.body.onGround && !this.attacking) {
+      this.crouching = false;
       if (this.canPay(T.jumpCost, hooks)) {
         this.body.velocity.y = this.sprinting ? T.sprintJumpVelocity : T.jumpVelocity;
         this.body.onGround = false;

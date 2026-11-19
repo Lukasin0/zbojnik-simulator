@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {
+  CASTLE,
   GORGE,
   GORGE_STEPS,
   LOC,
@@ -61,10 +62,21 @@ const FLATS: Flat[] = [
   { x: LOC.salas.x, z: LOC.salas.z, r: 16, h: baseHeight(LOC.salas.x, LOC.salas.z) },
   { x: LOC.terchova.x, z: LOC.terchova.z, r: 18, h: baseHeight(LOC.terchova.x, LOC.terchova.z) },
   { x: LOC.vatra.x, z: LOC.vatra.z, r: 9, h: baseHeight(LOC.vatra.x, LOC.vatra.z) },
-  { x: LOC.castle.x, z: LOC.castle.z, r: 9, h: baseHeight(LOC.castle.x, LOC.castle.z) },
+  { x: LOC.castle.x, z: LOC.castle.z, r: 21, h: baseHeight(LOC.castle.x, LOC.castle.z) },
   { x: LOC.mikulas.x, z: LOC.mikulas.z, r: 44, h: 2.4 },
   { x: LOC.hana.x, z: LOC.hana.z, r: 8, h: 2.2 },
 ];
+
+/** Inside the walls of Likava (courtyard incl. the wall footprint). */
+export function inCastle(x: number, z: number, margin = 0): boolean {
+  return Math.abs(x - LOC.castle.x) < CASTLE.halfX + margin && Math.abs(z - LOC.castle.z) < CASTLE.halfZ + margin;
+}
+
+/** Cart track from the castle gate east down into the valley. */
+export function onCastleRoad(x: number, z: number, margin = 0): boolean {
+  const dx = x - LOC.castle.x - CASTLE.halfX;
+  return dx > -1 && dx < 62 && Math.abs(z - LOC.castle.z - Math.sin(dx * 0.05) * 3 * Math.min(1, dx / 20)) < 2.2 + margin;
+}
 
 /** Cobbled market square of Liptovský Mikuláš. */
 export function isSquare(x: number, z: number): boolean {
@@ -237,7 +249,7 @@ export function flowerNoise(x: number, z: number): number {
 /** 0..1 – how thick grass tufts grow here (follows the colorAt rules). 0 on roads, rock, water, mud… */
 export function grassCover(x: number, z: number, h: number, slope: number): number {
   if (h < 0.3 || h > 27 || slope > 0.75) return 0;
-  if (isSquare(x, z)) return 0;
+  if (isSquare(x, z) || inCastle(x, z, 1) || onCastleRoad(x, z, 0.8)) return 0;
   if (h < 8 && (Math.abs(z - roadZ(x)) < ROAD_HALF_WIDTH + 0.6 || isMud(x, z))) return 0;
   if (Math.abs(x - LOC.field.x) < 10 && Math.abs(z - LOC.field.z) < 7) return 0;
   const g = gorgeAt(x, z);
@@ -255,6 +267,9 @@ export function colorAt(x: number, z: number, h: number, slope: number, out: THR
   if (h < WATER_LEVEL + 0.1) return out.copy(C.bed);
   if (h < 0.2 && Math.abs(z - riverZ(x)) < 14) return out.copy(C.bank);
   if (isSquare(x, z)) return out.copy(valueNoise(x * 0.8, z * 0.8) > 0.5 ? C.cobble : C.cobbleDark);
+  // trodden castle courtyard: packed earth with worn cobbles
+  if (onCastleRoad(x, z)) return out.copy(C.road).lerp(C.dirt, valueNoise(x * 0.3, z * 0.3) * 0.5);
+  if (inCastle(x, z, 0.5)) return out.copy(C.dirt).lerp(valueNoise(x * 0.6, z * 0.6) > 0.55 ? C.cobbleDark : C.path, 0.5);
   if (h < 8 && isMud(x, z)) return out.copy(C.mud);
   if (h < 8 && isRoad(x, z)) return out.copy(C.road);
   if (Math.abs(x - LOC.field.x) < 9 && Math.abs(z - LOC.field.z) < 6) {

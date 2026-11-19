@@ -387,3 +387,27 @@ export const BAND_HELP: readonly string[] = [
   'Na nich, bratia! Za slobodu!',
   'Pomôžeme ti, kapitán!',
 ];
+
+// ---------------------------------------------------------------- Likavský hrad
+
+export const GUARD_HUH: readonly string[] = [
+  'Hm? Kto je tam?',
+  'Niečo sa tam pohlo…',
+  'Stoj! …Alebo sa mi to len zdalo?',
+  'Hej! Ukáž sa!',
+];
+export const GUARD_NOTHING: readonly string[] = [
+  'Asi len mačka.',
+  'Zdá sa mi už aj vietor…',
+  'Nič. Treba menej piť na stráži.',
+  'Ticho… Asi som sa prepočul.',
+];
+export const CASTLE_ALARM: readonly string[] = [
+  'Poplach! Zbojník na hrade!',
+  'Ku zbrani! Jánošík je tu!',
+  'Stráže! Sem, rýchlo!',
+];
+export const GUARD_FOUND_BODY: readonly string[] = [
+  'Mišo?! Kto ti to urobil? Poplach!',
+  'Tu leží jeden z našich! Ku zbrani!',
+];

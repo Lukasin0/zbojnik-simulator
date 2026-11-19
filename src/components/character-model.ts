@@ -42,6 +42,8 @@ export interface CharacterLook {
   /** brass studs (cvočky) on the wide zbojnícky opasok */
   beltStuds?: boolean;
   eyeColor?: number;
+  /** lantern in the left hand (night guards) – toggled with setLantern() */
+  lantern?: boolean;
 }
 
 export interface AnimParams {
@@ -58,6 +60,8 @@ export interface AnimParams {
   talking?: boolean;
   /** -1 = none, else 0..1 progress of reaching for (or putting away) the valaška behind the belt */
   draw?: number;
+  /** 0..1 – sneaking crouch */
+  crouch?: number;
 }
 
 const LEG_TOP = 0.92;
@@ -186,6 +190,7 @@ export class CharacterModel {
   private disguiseParts: THREE.Object3D[] | null = null;
   private stride = 0;
   private air = 0;
+  private leftLantern: THREE.Group | null = null;
   private eyes: THREE.Group | null = null;
   private mouth: THREE.Mesh | null = null;
   private blinkTimer = 1 + Math.random() * 4;
@@ -406,6 +411,33 @@ export class CharacterModel {
       sh.add(at(part(new THREE.IcosahedronGeometry(0.06, 0).scale(0.9, 1.1, 0.8), L.skin), 0, -0.56, 0));
     }
     this.buildWeapon();
+    if (L.lantern) {
+      const holder = new THREE.Group();
+      holder.position.y = -0.58;
+      holder.add(at(part(new THREE.BoxGeometry(0.012, 0.08, 0.012), 0x2a2420), 0, -0.04, 0));
+      holder.add(at(part(new THREE.BoxGeometry(0.13, 0.025, 0.13), 0x2a2420), 0, -0.09, 0));
+      holder.add(at(part(new THREE.BoxGeometry(0.1, 0.14, 0.1), 0xffc070, { emissive: 0xffa040, emissiveIntensity: 4 }), 0, -0.17, 0));
+      holder.add(at(part(new THREE.BoxGeometry(0.13, 0.025, 0.13), 0x2a2420), 0, -0.25, 0));
+      this.shoulderL.add(holder);
+      this.leftLantern = holder;
+    }
+  }
+
+  /** Show / hide the left-hand lantern (night guards light it after dusk). */
+  setLantern(on: boolean): void {
+    if (this.leftLantern) this.leftLantern.visible = on;
+  }
+
+  get lanternLit(): boolean {
+    return this.leftLantern?.visible ?? false;
+  }
+
+  /** World position of the left-hand lantern glass; false if there is none. */
+  leftLanternPosition(out: THREE.Vector3): boolean {
+    if (!this.leftLantern) return false;
+    this.leftLantern.updateWorldMatrix(true, false);
+    this.leftLantern.localToWorld(out.set(0, -0.17, 0));
+    return true;
   }
 
   private buildWeapon(): void {
@@ -723,6 +755,23 @@ export class CharacterModel {
       }
       case 'normal':
         break;
+    }
+
+    // lantern held out a little in front, barely swinging
+    if (this.leftLantern?.visible && p.pose === 'normal') {
+      armL = armL * 0.3 - 0.4;
+      armLz = -0.12;
+    }
+    // sneaking: bent knees, lower hips, leaning forward – stacks on top of the walk cycle
+    const cr = p.crouch ?? 0;
+    if (cr > 0) {
+      hipL -= 0.7 * cr;
+      hipR -= 0.7 * cr;
+      kneeL += 1.1 * cr;
+      kneeR += 1.1 * cr;
+      bodyY -= 0.3 * cr;
+      torsoRx += 0.38 * cr;
+      headRx -= 0.28 * cr;
     }
 
     // reach back over the right hip for the valaška tucked behind the belt, then bring it forward
