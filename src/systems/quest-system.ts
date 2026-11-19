@@ -25,7 +25,7 @@ export const QUEST_STEPS: QuestStepDef[] = [
     chapter: 1,
     text: 'Šerm: rozsekaj slamených pánov valaškou ({n}/3)',
     goal: 3,
-    hint: 'Ľavé tlačidlo myši / J – seknúť valaškou',
+    hint: 'Ľavé tlačidlo myši / J – vytasiť spoza opaska a seknúť valaškou (R ju zasunie)',
   },
   {
     id: 'c1_strelba',

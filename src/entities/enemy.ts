@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { PANDUR_TUNING as T } from '@/config/constants';
 import type { GroundProvider } from '@/components/physics-body';
 import type { HitSource } from '@/systems/combat-system';
+import type { CharacterLook } from '@/components/character-model';
+import { angleDiff } from '@/utils/math-utils';
 import { Actor } from './actor';
 import { PANDUR } from './looks';
 
@@ -29,8 +31,8 @@ export class Pandur extends Actor {
   private target: Actor | null = null;
   private wakeRequested = false;
 
-  constructor(parent: THREE.Object3D) {
-    super(PANDUR, parent, T.hp);
+  constructor(parent: THREE.Object3D, look: CharacterLook = PANDUR) {
+    super(look, parent, T.hp);
     this.body.radius = 0.4;
     this.attackKind = 'slashR';
   }
@@ -59,14 +61,44 @@ export class Pandur extends Actor {
     this.hp = this.maxHp;
   }
 
+  /** Back on duty (patrols respawn their fallen drábi). */
+  revive(): void {
+    this.state = 'idle';
+    this.pose = 'normal';
+    this.hp = this.maxHp;
+    this.attackT = -1;
+    this.drowsy = 0;
+    this.deathReported = false;
+  }
+
   fallAsleep(): void {
     if (this.state === 'dead' || this.alerted) return;
     this.state = 'sleepy';
     this.pose = 'sleep';
   }
 
-  receiveHit(damage: number, from: THREE.Vector3, _source: HitSource, force = 3.5): void {
+  /** Set by the game: sparks + clang when a pandúr / dráb parries. */
+  static onBlock: ((p: Pandur, from: THREE.Vector3) => void) | null = null;
+
+  /** Ready and facing the blow → may catch it on the blade. */
+  private tryBlock(from: THREE.Vector3, source: HitSource): boolean {
+    if (source !== 'player' && source !== 'companion') return false;
+    if (this.state !== 'chase' || this.drowsy > 0) return false;
+    const yaw = Math.atan2(from.x - this.position.x, from.z - this.position.z);
+    if (Math.abs(angleDiff(this.facing, yaw)) > T.blockArc) return false;
+    if (Math.random() > T.blockChance) return false;
+    this.knockback(from, 1.2);
+    // a parry is followed by a quick counter
+    this.state = 'windup';
+    this.timer = T.windup * 0.6;
+    this.attackT = 0;
+    Pandur.onBlock?.(this, from);
+    return true;
+  }
+
+  receiveHit(damage: number, from: THREE.Vector3, source: HitSource, force = 3.5): void {
     if (this.state === 'dead') return;
+    if (this.tryBlock(from, source)) return;
     const wasSleeping = this.state === 'sleepy';
     this.hp = Math.max(0, this.hp - damage * (wasSleeping ? 1.5 : 1));
     this.knockback(from, force);

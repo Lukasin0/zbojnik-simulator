@@ -36,16 +36,16 @@ interface Key {
 
 /** Hour → look of the Liptov sky. The light colour at night is moonlight. */
 const KEYFRAMES: [number, KeyHex][] = [
-  [0, { top: 0x0a1222, horizon: 0x1c2638, light: 0x7f98c8, lightIntensity: 0.55, hemiSky: 0x34466a, hemiGround: 0x141a14, hemiIntensity: 0.75, fogDensity: 0.0105, exposure: 1.35, cloudLit: 0x3a4458, cloudShade: 0x161c28, mist: 0.45 }],
+  [0, { top: 0x0a1222, horizon: 0x1c2638, light: 0x6f90dc, lightIntensity: 0.6, hemiSky: 0x2e4676, hemiGround: 0x141a14, hemiIntensity: 0.75, fogDensity: 0.0105, exposure: 1.35, cloudLit: 0x3a4458, cloudShade: 0x161c28, mist: 0.45 }],
   [4.5, { top: 0x141c34, horizon: 0x3a3a52, light: 0x8094c0, lightIntensity: 0.45, hemiSky: 0x3c4868, hemiGround: 0x181c16, hemiIntensity: 0.75, fogDensity: 0.011, exposure: 1.3, cloudLit: 0x4a4a62, cloudShade: 0x1e2232, mist: 0.75 }],
-  [6, { top: 0x46607e, horizon: 0xcfb0a0, light: 0xffb47c, lightIntensity: 1.1, hemiSky: 0xa4acc0, hemiGround: 0x3e3a2a, hemiIntensity: 1.1, fogDensity: 0.0115, exposure: 1.15, cloudLit: 0xffc8a0, cloudShade: 0x6a6070, mist: 1 }],
+  [6, { top: 0x46607e, horizon: 0xd8ae96, light: 0xffa868, lightIntensity: 1.1, hemiSky: 0xa4acc0, hemiGround: 0x3e3a2a, hemiIntensity: 1.1, fogDensity: 0.0115, exposure: 1.15, cloudLit: 0xffc8a0, cloudShade: 0x6a6070, mist: 1 }],
   [8, { top: 0x587090, horizon: 0xc8c4b4, light: 0xffdcb0, lightIntensity: 2.1, hemiSky: 0xc4d0dc, hemiGround: 0x545a36, hemiIntensity: 1.45, fogDensity: 0.0098, exposure: 1.06, cloudLit: 0xf6ece0, cloudShade: 0x8c94a0, mist: 0.85 }],
   [10.5, { top: 0x5a7ca2, horizon: 0xaebcc0, light: 0xffecd2, lightIntensity: 2.6, hemiSky: 0xd0dce6, hemiGround: 0x5a6038, hemiIntensity: 1.6, fogDensity: 0.0082, exposure: 1.04, cloudLit: 0xf6f2ec, cloudShade: 0x9098a4, mist: 0.15 }],
   [13.5, { top: 0x5480ac, horizon: 0xb4c4c8, light: 0xfff2dc, lightIntensity: 2.8, hemiSky: 0xd4e0ea, hemiGround: 0x5e6438, hemiIntensity: 1.7, fogDensity: 0.0075, exposure: 1.02, cloudLit: 0xffffff, cloudShade: 0x98a0ac, mist: 0 }],
-  [17, { top: 0x5a7496, horizon: 0xbcb6a2, light: 0xffd8a0, lightIntensity: 2.3, hemiSky: 0xcccad0, hemiGround: 0x5a5634, hemiIntensity: 1.5, fogDensity: 0.0082, exposure: 1.05, cloudLit: 0xfce6c8, cloudShade: 0x948e94, mist: 0 }],
-  [19.3, { top: 0x405078, horizon: 0xd49a78, light: 0xff9a5a, lightIntensity: 1.35, hemiSky: 0xa898a4, hemiGround: 0x403022, hemiIntensity: 1.1, fogDensity: 0.0086, exposure: 1.12, cloudLit: 0xff9c6a, cloudShade: 0x5a4a5c, mist: 0.1 }],
-  [20.6, { top: 0x1c2444, horizon: 0x4a3a52, light: 0x8a8cc0, lightIntensity: 0.5, hemiSky: 0x40486a, hemiGround: 0x1c1a16, hemiIntensity: 0.8, fogDensity: 0.0098, exposure: 1.28, cloudLit: 0x5a4a62, cloudShade: 0x1e1e2e, mist: 0.3 }],
-  [24, { top: 0x0a1222, horizon: 0x1c2638, light: 0x7f98c8, lightIntensity: 0.55, hemiSky: 0x34466a, hemiGround: 0x141a14, hemiIntensity: 0.75, fogDensity: 0.0105, exposure: 1.35, cloudLit: 0x3a4458, cloudShade: 0x161c28, mist: 0.45 }],
+  [17, { top: 0x5a7496, horizon: 0xc4b69c, light: 0xffcc8c, lightIntensity: 2.3, hemiSky: 0xcccad0, hemiGround: 0x5a5634, hemiIntensity: 1.5, fogDensity: 0.0082, exposure: 1.05, cloudLit: 0xfce6c8, cloudShade: 0x948e94, mist: 0 }],
+  [19.3, { top: 0x3c4c7a, horizon: 0xe2966a, light: 0xff8a44, lightIntensity: 1.45, hemiSky: 0xa898a4, hemiGround: 0x403022, hemiIntensity: 1.1, fogDensity: 0.0086, exposure: 1.12, cloudLit: 0xff9c6a, cloudShade: 0x5a4a5c, mist: 0.1 }],
+  [20.6, { top: 0x18244a, horizon: 0x433c5c, light: 0x7a8ad0, lightIntensity: 0.5, hemiSky: 0x40486a, hemiGround: 0x1c1a16, hemiIntensity: 0.8, fogDensity: 0.0098, exposure: 1.28, cloudLit: 0x5a4a62, cloudShade: 0x1e1e2e, mist: 0.3 }],
+  [24, { top: 0x0a1222, horizon: 0x1c2638, light: 0x6f90dc, lightIntensity: 0.6, hemiSky: 0x2e4676, hemiGround: 0x141a14, hemiIntensity: 0.75, fogDensity: 0.0105, exposure: 1.35, cloudLit: 0x3a4458, cloudShade: 0x161c28, mist: 0.45 }],
 ];
 
 function toKey(h: KeyHex): Key {
@@ -173,9 +173,11 @@ export class DayNight {
     const useSun = this.sunDir.y > -0.02;
     this.lightDir.copy(useSun ? this.sunDir : this.moonDir);
     const handover = smoothstep(0.02, 0.14, Math.abs(this.lightDir.y));
-    app.sun.position.copy(focus).addScaledVector(this.lightDir, 90);
-    app.sun.target.position.copy(focus);
+    app.placeSun(focus, this.lightDir);
     app.sun.color.copy(c.light);
+    // golden hour = low sun above the horizon; overcast skies kill most of the warmth
+    const low = this.sunDir.y > -0.04 ? 1 - smoothstep(0.06, 0.38, this.sunDir.y) : 0;
+    app.setGrade(low * (1 - (weather?.overcast ?? 0) * 0.7), this.night);
     app.sun.intensity = c.lightIntensity * handover;
 
     app.hemi.color.copy(c.hemiSky);

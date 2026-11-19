@@ -216,7 +216,7 @@ export class World implements GroundProvider, NightReceiver {
   /** NightReceiver: windows light up, fires and lanterns get stronger. */
   setNight(night: number): void {
     this.night = night;
-    this.windowMaterial.emissiveIntensity = smoothstep(0.35, 0.85, night) * 2.2;
+    this.windowMaterial.emissiveIntensity = smoothstep(0.35, 0.85, night) * 3.2;
     for (const l of this.nightLights) l.light.intensity = l.base * (0.5 + night * 1.6);
   }
 

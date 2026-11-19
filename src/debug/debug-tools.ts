@@ -145,6 +145,8 @@ export function installDebugTools(game: Game, loop: GameLoop): void {
         alarm: game.town.alarm,
         disguised: game.disguised,
         step: game.data.questStep,
+        drabi: game.patrols.enemies.map((g) => ({ hp: Math.round(g.hp), state: g.state, x: Math.round(g.position.x), z: Math.round(g.position.z), vis: g.model.root.visible })),
+        bands: game.patrols.bandMembers.map((b) => ({ temper: b.temper, x: Math.round(b.position.x), z: Math.round(b.position.z) })),
         guards: game.town.guards.map((g) => ({ hp: Math.round(g.hp), state: g.state, x: Math.round(g.position.x), z: Math.round(g.position.z) })),
       };
     },

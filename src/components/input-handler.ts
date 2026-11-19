@@ -14,6 +14,8 @@ export interface PlayerIntent {
   aim: boolean;
   /** Shoot button released – fire. */
   shoot: boolean;
+  /** Draw / sheathe the valaška (R). */
+  draw: boolean;
   aimYaw: number;
 }
 
@@ -33,6 +35,7 @@ export class PlayerInputHandler {
         heavy: false,
         aim: false,
         shoot: false,
+        draw: false,
         aimYaw: cameraYaw,
       };
     }
@@ -55,6 +58,7 @@ export class PlayerInputHandler {
       heavy: this.input.justPressed('heavy'),
       aim: this.input.isDown('shoot'),
       shoot: this.input.justReleased('shoot'),
+      draw: this.input.justPressed('draw'),
       aimYaw: cameraYaw,
     };
   }

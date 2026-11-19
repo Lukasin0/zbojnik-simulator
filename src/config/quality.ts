@@ -32,6 +32,10 @@ export interface QualityPreset {
   grassDistance: number;
   /** Wind sway on grass, bushes and tree crowns. */
   wind: boolean;
+  /** UnrealBloom strength (0 = pass off). */
+  bloom: number;
+  /** Film grain amount in the grade pass. */
+  grain: number;
 }
 
 export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
@@ -54,6 +58,8 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     grassDensity: 0.3,
     grassDistance: 38,
     wind: false,
+    bloom: 0,
+    grain: 0,
   },
   medium: {
     label: 'Stredná',
@@ -74,6 +80,8 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     grassDensity: 0.6,
     grassDistance: 58,
     wind: true,
+    bloom: 0,
+    grain: 0.025,
   },
   high: {
     label: 'Vysoká',
@@ -94,6 +102,8 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     grassDensity: 1,
     grassDistance: 85,
     wind: true,
+    bloom: 0.45,
+    grain: 0.03,
   },
   ultra: {
     label: 'Ultra',
@@ -114,6 +124,8 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     grassDensity: 1,
     grassDistance: 120,
     wind: true,
+    bloom: 0.55,
+    grain: 0.03,
   },
 };
 

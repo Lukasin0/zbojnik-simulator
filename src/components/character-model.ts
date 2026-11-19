@@ -49,6 +49,8 @@ export interface AnimParams {
   /** 0..1 flinch */
   hurt: number;
   talking?: boolean;
+  /** -1 = none, else 0..1 progress of reaching for (or putting away) the valaška behind the belt */
+  draw?: number;
 }
 
 const LEG_TOP = 0.92;
@@ -369,8 +371,33 @@ export class CharacterModel {
       // the night watchman's lantern hanging from his fist
       holder.add(at(part(new THREE.BoxGeometry(0.012, 0.08, 0.012), 0x2a2420), 0, -0.04, 0));
       holder.add(at(part(new THREE.BoxGeometry(0.13, 0.025, 0.13), 0x2a2420), 0, -0.09, 0));
-      holder.add(at(part(new THREE.BoxGeometry(0.1, 0.14, 0.1), 0xffc070, { emissive: 0xffa040, emissiveIntensity: 2.4 }), 0, -0.17, 0));
+      holder.add(at(part(new THREE.BoxGeometry(0.1, 0.14, 0.1), 0xffc070, { emissive: 0xffa040, emissiveIntensity: 4 }), 0, -0.17, 0));
       holder.add(at(part(new THREE.BoxGeometry(0.13, 0.025, 0.13), 0x2a2420), 0, -0.25, 0));
+    }
+  }
+
+  /** True while the valaška / šabľa is tucked behind the belt instead of in the hand. */
+  get sheathed(): boolean {
+    return this.weaponHolder !== null && this.weaponHolder.parent === this.torso;
+  }
+
+  /**
+   * Tuck the weapon behind the belt (diagonally across the small of the back, grip by the right hip,
+   * blade up by the left) or put it back into the right hand.
+   */
+  setSheathed(on: boolean): void {
+    const h = this.weaponHolder;
+    const w = this.look.weapon;
+    if (!h || (w !== 'valaska' && w !== 'saber') || this.sheathed === on) return;
+    const g = this.look.girth ?? 1;
+    if (on) {
+      this.torso.add(h);
+      h.position.set(0.2 * g, 0.06, -0.24 * g);
+      h.rotation.set(0, 0, -2.09);
+    } else {
+      this.shoulderR.add(h);
+      h.position.set(0, -0.55, 0);
+      h.rotation.set(0, 0, 0);
     }
   }
 
@@ -617,6 +644,14 @@ export class CharacterModel {
       }
       case 'normal':
         break;
+    }
+
+    // reach back over the right hip for the valaška tucked behind the belt, then bring it forward
+    if (p.draw !== undefined && p.draw >= 0) {
+      const r = Math.sin(Math.PI * Math.min(1, p.draw));
+      armR = lerp(armR, 0.75, r);
+      armRz = lerp(armRz, 0.32, r);
+      torsoRy = lerp(torsoRy, 0.3, r);
     }
 
     this.hipL.rotation.x = hipL;

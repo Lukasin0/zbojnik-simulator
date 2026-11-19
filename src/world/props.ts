@@ -144,7 +144,7 @@ export function createForge(): THREE.Group {
   }
   g.add(at(part(roofPrism(6.6, 1.8, 5.4), ROOF), 0, 3, 0, 0, Math.PI / 2, 0));
   g.add(at(part(new THREE.BoxGeometry(1.6, 1.0, 1.4), STONE), -1.2, 0.5, -1.2));
-  g.add(at(part(new THREE.BoxGeometry(1.2, 0.1, 1.0), 0xff7a2a, { emissive: 0xff5a10, emissiveIntensity: 2 }), -1.2, 1.02, -1.2));
+  g.add(at(part(new THREE.BoxGeometry(1.2, 0.1, 1.0), 0xff7a2a, { emissive: 0xff5a10, emissiveIntensity: 4 }), -1.2, 1.02, -1.2));
   g.add(at(part(new THREE.BoxGeometry(0.4, 0.6, 0.3), 0x3a3a3a), 1.0, 0.3, 0));
   g.add(at(part(new THREE.BoxGeometry(0.8, 0.22, 0.32), 0x4a4a4e, { metalness: 0.6 }), 1.0, 0.7, 0));
   // displayed belts on the wall
@@ -432,9 +432,13 @@ export function createVatraPile(): THREE.Group {
 
 export function createFlame(): THREE.Group {
   const g = new THREE.Group();
-  const outer = new THREE.Mesh(new THREE.ConeGeometry(0.75, 2.2, 6), new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.85 }));
+  // HDR colours (> 1) so the flames cross the bloom threshold
+  const outer = new THREE.Mesh(
+    new THREE.ConeGeometry(0.75, 2.2, 6),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff7a1a).multiplyScalar(2.2), transparent: true, opacity: 0.85 }),
+  );
   outer.position.y = 1.1;
-  const inner = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.5, 6), new THREE.MeshBasicMaterial({ color: 0xffd45a }));
+  const inner = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.5, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffd45a).multiplyScalar(2.6) }));
   inner.position.y = 0.8;
   g.add(outer, inner);
   return g;

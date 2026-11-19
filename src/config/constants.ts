@@ -89,13 +89,20 @@ export const PLAYER_TUNING = {
   mudSlow: 0.5,
   mudSlowKrpce: 0.85,
   waterSlow: 0.55,
+  /** seconds to pull the valaška from behind the belt / tuck it back */
+  drawTime: 0.42,
+  sheatheTime: 0.55,
 } as const;
 
 export const PANDUR_TUNING = {
-  hp: 70,
+  hp: 115,
   speed: 4.3,
   drowsySpeed: 2.2,
-  damage: 9,
+  damage: 10,
+  /** chance to parry a frontal melee blow while ready (chasing) */
+  blockChance: 0.28,
+  /** frontal cone (radians from facing) in which blows can be parried */
+  blockArc: 1.1,
   range: 1.9,
   windup: 0.55,
   drowsyWindup: 1.1,
@@ -111,6 +118,85 @@ export const COMPANION_TUNING = {
   damage: 13,
   range: 2.1,
   cooldown: 1.15,
+} as const;
+
+/**
+ * Villagers (and the wandering zbojníci) can be attacked: the first blow only earns a warning,
+ * another one within `warnTime` starts a real fist fight. Beaten villagers are knocked out, not killed
+ * (the story needs them) and hold a grudge for a while.
+ */
+export const BRAWL_TUNING = {
+  hp: 140,
+  damage: 9,
+  speed: 4.6,
+  range: 1.7,
+  windup: 0.5,
+  recover: 0.8,
+  /** seconds the warning stands – hit again within it and they fight */
+  warnTime: 25,
+  /** damage taken from the warning blow (fraction) */
+  warnDamage: 0.25,
+  /** give up when the culprit runs this far */
+  giveUpDistance: 30,
+  knockoutTime: 45,
+  /** seconds a beaten / provoked villager refuses to talk */
+  grudgeTime: 120,
+  /** dukáty that fall out of a knocked-out villager's pocket */
+  knockoutLoot: [2, 8],
+} as const;
+
+/** Tougher folk: hp / damage overrides per villager. */
+export const BRAWL_OVERRIDES: Partial<Record<string, { hp?: number; damage?: number; speed?: number }>> = {
+  baca: { hp: 230, damage: 14 },
+  kovac: { hp: 260, damage: 16, speed: 4.2 },
+  krcmar: { hp: 180, damage: 11 },
+  hostinsky: { hp: 180, damage: 11 },
+  ponocny: { hp: 160, damage: 12 },
+  ondras: { hp: 220, damage: 15 },
+  uhorcik: { hp: 260, damage: 16 },
+  ilcik: { hp: 240, damage: 15 },
+  gajdosik: { hp: 200, damage: 12 },
+  katarina: { hp: 90, damage: 6 },
+  gazdina: { hp: 100, damage: 7 },
+  hana: { hp: 90, damage: 6 },
+};
+
+/** Groups walking the valley: drábi (hostile) and other zbojnícke partie (friendly, fight the drábi). */
+export interface PatrolDef {
+  kind: 'drabi' | 'zbojnici';
+  size: number;
+  /** waypoint loop (x, z) */
+  route: [number, number][];
+}
+
+export const PATROLS: PatrolDef[] = [
+  // the castle guard walking round Likava
+  { kind: 'drabi', size: 3, route: [[-124, -12], [-120, 22], [-140, 33], [-153, 16], [-150, -6]] },
+  // castle → past the salaš → towards the village and back
+  { kind: 'drabi', size: 3, route: [[-128, 42], [-104, 78], [-60, 82], [-36, 58], [-58, 28], [-100, 22]] },
+  // forest east of the village
+  { kind: 'drabi', size: 4, route: [[70, -10], [110, -5], [125, 30], [95, 46], [64, 30]] },
+  // forest north of the village, under Rovná hora
+  { kind: 'drabi', size: 2, route: [[10, -40], [42, -58], [72, -44], [50, -20]] },
+  // another partia roaming between Rovná hora and Terchová
+  { kind: 'zbojnici', size: 3, route: [[-40, -100], [0, -120], [40, -138], [62, -110], [20, -90], [-20, -78]] },
+  { kind: 'zbojnici', size: 3, route: [[86, -100], [118, -112], [132, -92], [100, -82]] },
+];
+
+export const PATROL_TUNING = {
+  walkSpeed: 1.7,
+  /** drábi spot the zbojník at this distance (less at night, much less in disguise) */
+  sightDay: 15,
+  sightNight: 8,
+  sightDisguised: 3.5,
+  /** lose interest beyond this distance */
+  loseDistance: 42,
+  /** simulate / show only within this distance of the player */
+  activeDistance: 140,
+  /** a wiped-out group comes back after this many seconds (when nobody is watching) */
+  respawn: 360,
+  /** friendly zbojníci join a fight with drábi within this distance */
+  helpDistance: 22,
 } as const;
 
 export const COACH_SPEED = 3.6;

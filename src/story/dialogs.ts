@@ -47,6 +47,7 @@ import {
   WOKEN_KOVAC,
   ZEMAN_AFTER,
   ZEMAN_PLEA,
+  BRAWL_GRUDGE,
   line,
 } from './lines';
 
@@ -125,8 +126,22 @@ function npcAt(game: Game, id: NpcId, radius: number, label: () => string | null
     id,
     radius,
     position: () => game.npcs.get(id)?.position ?? new THREE.Vector3(0, -999, 0),
-    label: () => (game.npcs.get(id)?.model.root.visible === false ? null : label()),
-    act,
+    label: () => {
+      const npc = game.npcs.get(id);
+      if (!npc || npc.model.root.visible === false) return null;
+      // in a fist fight or lying knocked out – no chatting
+      if (npc.temper === 'hostile' || npc.temper === 'down') return null;
+      if (npc.grudge > 0) return `${npc.displayName} sa na teba hnevá`;
+      return label();
+    },
+    act: () => {
+      const npc = game.npcs.get(id);
+      if (npc && npc.grudge > 0) {
+        game.bark(npc.model.root, line(BRAWL_GRUDGE), 3);
+        return;
+      }
+      act();
+    },
   };
 }
 

@@ -57,7 +57,8 @@ export type QuestStepId =
 
 export type MinigameKind = 'fujara' | 'paka' | 'halusky';
 
-export type Faction = 'zbojnik' | 'pandur' | 'zver' | 'prop';
+/** civil = villagers (can be provoked), band = wandering zbojníci of other partie */
+export type Faction = 'zbojnik' | 'pandur' | 'zver' | 'prop' | 'civil' | 'band';
 
 export interface Vec2 {
   x: number;

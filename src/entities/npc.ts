@@ -1,8 +1,26 @@
 import * as THREE from 'three';
 import type { CharacterLook, Pose } from '@/components/character-model';
 import type { GroundProvider } from '@/components/physics-body';
-import type { NpcId } from '@/types/game-types';
+import { BRAWL_OVERRIDES, BRAWL_TUNING as B } from '@/config/constants';
+import type { HitSource } from '@/systems/combat-system';
+import type { Faction, NpcId } from '@/types/game-types';
 import { Actor } from './actor';
+import { MeleeBrain } from './melee-brain';
+
+/** How a villager feels about the captain right now. */
+export type Temper = 'calm' | 'warned' | 'hostile' | 'down';
+export type TemperEvent = 'warn' | 'fight' | 'down' | 'calm' | 'up' | 'help';
+
+export interface NpcFightContext {
+  /** the captain – the only one who provokes villagers */
+  player: Actor;
+  /** alerted drábi / pandúri nearby (wandering zbojníci rush to help against them) */
+  foes: readonly Actor[];
+  onStrike(npc: Npc, target: Actor): void;
+  onEvent(npc: Npc, ev: TemperEvent): void;
+}
+
+const tmpV = { x: 0, z: 0 };
 
 /** Villagers with a home walk to their door in the evening and come out again in the morning. */
 export interface SleepSchedule {
@@ -20,7 +38,15 @@ function isBedtime(hour: number, s: SleepSchedule): boolean {
 
 /** Villager / quest giver; turns to face the captain when near, keeps a day & night routine. */
 export class Npc extends Actor {
-  readonly faction = 'zbojnik' as const;
+  readonly faction: Faction;
+  temper: Temper = 'calm';
+  /** > 0 → still angry, refuses to talk */
+  grudge = 0;
+  private temperTimer = 0;
+  private provokedByPlayer = false;
+  private pendingEvent: TemperEvent | null = null;
+  private foe: Actor | null = null;
+  private readonly brain: MeleeBrain;
   private readonly home = new THREE.Vector3();
   private readonly homeYaw: number;
   private wanderTimer = Math.random() * 5;
@@ -48,8 +74,18 @@ export class Npc extends Actor {
     world: GroundProvider,
     readonly basePose: Pose = 'normal',
     readonly wanderRadius = 0,
+    faction: Faction = 'civil',
   ) {
-    super(look, parent, 100);
+    const o = BRAWL_OVERRIDES[id] ?? {};
+    super(look, parent, o.hp ?? B.hp);
+    this.faction = faction;
+    this.brain = new MeleeBrain({
+      damage: o.damage ?? B.damage,
+      speed: o.speed ?? B.speed,
+      range: B.range,
+      windup: B.windup,
+      recover: B.recover,
+    });
     this.body.radius = 0.4;
     this.teleport(x, z, world);
     this.home.copy(this.position);
@@ -81,11 +117,136 @@ export class Npc extends Actor {
   }
 
   override isAlive(): boolean {
-    return true;
+    return this.temper !== 'down' && this.routine !== 'asleep';
   }
 
-  receiveHit(): void {
-    /* villagers are not valid targets */
+  /** Damage of one of this villager's blows. */
+  get strikeDamage(): number {
+    return this.brain.stats.damage;
+  }
+
+  /** In a fight with the captain (companions join in). */
+  get alerted(): boolean {
+    return this.temper === 'hostile' && this.provokedByPlayer;
+  }
+
+  /** Willing to talk / trade. */
+  get friendly(): boolean {
+    return (this.temper === 'calm' || this.temper === 'warned') && this.grudge <= 0;
+  }
+
+  receiveHit(damage: number, from: THREE.Vector3, source: HitSource, force = 3.5): void {
+    if (!this.isAlive()) return;
+    this.cancelEmote();
+    const byCaptain = source !== 'enemy';
+    this.standUp();
+    if (byCaptain && this.temper === 'calm') {
+      // first blow: a warning – and a bruise
+      this.temper = 'warned';
+      this.temperTimer = B.warnTime;
+      this.hp = Math.max(1, this.hp - damage * B.warnDamage);
+      this.knockback(from, 2);
+      this.facing = Math.atan2(from.x - this.position.x, from.z - this.position.z);
+      this.pendingEvent = 'warn';
+      return;
+    }
+    if (byCaptain) {
+      if (this.temper !== 'hostile' || !this.provokedByPlayer) this.pendingEvent = 'fight';
+      this.temper = 'hostile';
+      this.provokedByPlayer = true;
+    }
+    this.hp = Math.max(0, this.hp - damage);
+    this.knockback(from, force);
+    this.brain.stagger(0.25 + force * 0.04);
+    this.attackT = -1;
+    if (this.hp <= 0) {
+      this.temper = 'down';
+      this.temperTimer = B.knockoutTime;
+      this.pose = 'dead';
+      this.pendingEvent = 'down';
+    }
+  }
+
+  /** Sitting / working villagers jump to their feet when it comes to blows. */
+  private standUp(): void {
+    if (this.pose !== 'normal' && this.pose !== 'dead') this.pose = 'normal';
+    this.body.collides = true;
+  }
+
+  private settle(world: GroundProvider): void {
+    this.temper = 'calm';
+    this.provokedByPlayer = false;
+    this.foe = null;
+    this.brain.reset();
+    this.attackT = -1;
+    this.pose = this.basePose;
+    this.body.collides = this.basePose === 'normal';
+    // sitters go straight back to their bench
+    if (this.basePose !== 'normal') this.teleport(this.home.x, this.home.z, world);
+  }
+
+  /** Fight / knock-out / warning logic. Returns true when it took over this tick. */
+  private updateTemper(dt: number, world: GroundProvider, ctx: NpcFightContext | undefined): boolean {
+    if (this.grudge > 0) this.grudge -= dt;
+    if (this.pendingEvent && ctx) {
+      ctx.onEvent(this, this.pendingEvent);
+      this.pendingEvent = null;
+    }
+    // wandering zbojníci rush at drábi who are fighting nearby
+    if (ctx && this.faction === 'band' && this.temper !== 'down' && !this.provokedByPlayer) {
+      let best: Actor | null = null;
+      let bestD = 22;
+      for (const f of ctx.foes) {
+        const d = f.position.distanceTo(this.position);
+        if (f.isAlive() && d < bestD) {
+          bestD = d;
+          best = f;
+        }
+      }
+      if (best && this.temper !== 'hostile') {
+        this.temper = 'hostile';
+        this.standUp();
+        ctx.onEvent(this, 'help');
+      }
+      if (this.temper === 'hostile') this.foe = best;
+    }
+    switch (this.temper) {
+      case 'calm':
+        return false;
+      case 'warned':
+        this.temperTimer -= dt;
+        if (this.temperTimer <= 0) this.settle(world);
+        return false;
+      case 'down':
+        this.temperTimer -= dt;
+        this.body.steer(0, 0, 6, dt);
+        this.body.integrate(dt, world);
+        if (this.temperTimer <= 0) {
+          this.hp = this.maxHp;
+          this.grudge = B.grudgeTime;
+          this.settle(world);
+          ctx?.onEvent(this, 'up');
+        }
+        return true;
+      case 'hostile': {
+        if (this.provokedByPlayer && ctx) this.foe = ctx.player;
+        const foe = this.foe;
+        if (!ctx || !foe || !foe.isAlive() || foe.position.distanceTo(this.position) > B.giveUpDistance) {
+          if (this.provokedByPlayer) {
+            this.grudge = B.grudgeTime;
+            ctx?.onEvent(this, 'calm');
+          }
+          this.hp = Math.max(this.hp, this.maxHp * 0.6);
+          this.settle(world);
+          return false;
+        }
+        this.brain.tick(this, foe, dt, () => ctx.onStrike(this, foe), tmpV);
+        this.attackT = this.brain.attackT;
+        this.body.steer(tmpV.x, tmpV.z, this.brain.phase === 'stagger' ? 2 : 9, dt);
+        this.body.integrate(dt, world);
+        return true;
+      }
+    }
   }
 
   /** Somebody bangs on the door at night – the villager comes out for a while, grumbling. */
@@ -97,8 +258,9 @@ export class Npc extends Actor {
     this.routineTimer = 40;
   }
 
-  update(dt: number, world: GroundProvider, playerPos: THREE.Vector3, hour = 12): void {
+  update(dt: number, world: GroundProvider, playerPos: THREE.Vector3, hour = 12, fight?: NpcFightContext): void {
     this.beginTick();
+    if (this.updateTemper(dt, world, fight)) return;
     const s = this.schedule;
     if (s) {
       const bed = isBedtime(hour, s);

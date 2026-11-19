@@ -323,3 +323,67 @@ export const HIDEOUT_TALK: readonly string[] = [
 export const HOUR_NAMES = [
   'polnoc', 'jedna', 'druhá', 'tretia', 'štvrtá', 'piata', 'šiesta', 'siedma', 'ôsma', 'deviata', 'desiata', 'jedenásta',
 ] as const;
+
+// ---------------------------------------------------------------- bitky s dedinčanmi
+
+/** First blow – a warning. Keyed lines for some villagers, generic pool otherwise. */
+export const BRAWL_WARN: readonly string[] = [
+  'Hej! Čo to stváraš?! Ešte raz a dostaneš!',
+  'Ruky preč, Jurko! Lebo sa nahneváme!',
+  'To bolo naschvál? Druhý raz ti to nedarujem!',
+  'Daj si pokoj, ty zbojník jeden!',
+];
+export const BRAWL_WARN_BY: Partial<Record<string, readonly string[]>> = {
+  baca: ['Ty mi ideš na salaš s valaškou? Ešte raz a pôjdeš dolu kopcom hlavou napred!'],
+  krcmar: ['V mojom šenku sa nebije! Ešte raz a vyhodím ťa aj s lavicou!'],
+  hostinsky: ['Tu sa platí, nie bije! Ešte raz a zavolám stráž!'],
+  kovac: ['Mňa? Kováča? Ešte raz a prekujem ti nos na podkovu!'],
+  katarina: ['Jój, Jurko, starú ženu? Hanbi sa!'],
+  ponocny: ['Ponocného sa nebije! Ešte raz a budem trúbiť na poplach!'],
+};
+export const BRAWL_FIGHT: readonly string[] = [
+  'Tak dobre – ty si to chcel!',
+  'No počkaj, ja ti ukážem!',
+  'Poď sem, nech ťa naučím slušnosti!',
+  'Bitka? Môžeš ju mať!',
+];
+export const BRAWL_DOWN: readonly string[] = [
+  'Uf… dosť… dosť…',
+  'Hviezdičky… vidím hviezdičky…',
+  'Toto si zapamätám, Jánošík…',
+];
+export const BRAWL_UP: readonly string[] = [
+  'Hlava mi treští… Choď mi z očí.',
+  'Nehovor na mňa. Ešte sa hnevám.',
+  'Takto sa správa zbojnícky kapitán? Hanba.',
+];
+export const BRAWL_CALM: readonly string[] = [
+  'Utekaj, utekaj! Nabudúce ťa chytím!',
+  'Zbabelec! No len sa vráť…',
+];
+/** Talking to someone who still holds a grudge. */
+export const BRAWL_GRUDGE: readonly string[] = [
+  'S tebou teraz nehovorím.',
+  'Ešte ma bolí hlava. Príď inokedy.',
+  'Najprv sa nauč slušnosti, potom sa vráť.',
+];
+
+// ---------------------------------------------------------------- hliadky a iné partie
+
+export const DRABI_ALERT: readonly string[] = [
+  'Tam je! Zbojník! Na neho!',
+  'Hej, ty! Stoj v mene grófa!',
+  'Chlapi, máme ho! Odmena je naša!',
+];
+export const BAND_GREET: readonly string[] = [
+  'Zdar Boh, kapitán! Hory sú dnes pokojné.',
+  'Jánošík! Pozdravuj Uhorčíka.',
+  'Drábi chodia okolo hradu, daj si pozor.',
+  'Vidieť ťa je radosť, Jurko. Dobrý lup!',
+  'Ideme cez Terchovú. Nepotrebuješ niečo odkázať?',
+];
+export const BAND_HELP: readonly string[] = [
+  'Drábi! Chlapi, za mnou!',
+  'Na nich, bratia! Za slobodu!',
+  'Pomôžeme ti, kapitán!',
+];

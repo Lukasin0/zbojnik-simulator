@@ -311,3 +311,25 @@ export const DISGUISE = {
   coat: 0x6a5640,
   cap: 0x3a3028,
 } as const;
+
+/** Panskí drábi – the lord's hired muscle patrolling forests and the castle surroundings. */
+export const DRAB: CharacterLook = {
+  ...PANDUR,
+  shirt: 0xcfc6b2,
+  pants: 0x4a3a2a,
+  coat: 0x6a2a22,
+  coatLong: false,
+  trim: 0x2a2420,
+  hat: 'cap',
+  hatColor: 0x3a2a1c,
+  belt: 0x2a1e16,
+  weapon: 'saber',
+};
+
+/** Men of other zbojnícke partie roaming the hills – same folk dress, different vests and hair. */
+export const BAND_LOOKS: CharacterLook[] = [
+  { ...JANOSIK, hair: 0x4a3020, vest: 0x3c5a2a, braids: true, pistol: false, mustache: true },
+  { ...JANOSIK, hair: 0x2a1e16, vest: 0x5a2a3a, braids: false, pistol: false, beard: 0x2a1e16, girth: 1.08 },
+  { ...JANOSIK, hair: 0x8a5a2a, vest: 0x2a3a5a, braids: true, pistol: false, height: 0.96 },
+  { ...JANOSIK, hair: 0x1a1410, vest: 0x6a4a1a, braids: false, pistol: false, mustache: true, feather: true },
+];

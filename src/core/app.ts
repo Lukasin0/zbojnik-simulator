@@ -3,6 +3,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { DEFAULT_GRAPHICS, GAME_CONFIG } from '@/config/game-config';
 import { QUALITY_LEVELS, QUALITY_PRESETS, detectGpu, type GpuInfo, type QualityPreset } from '@/config/quality';
 import type { GraphicsSettings } from '@/types/game-types';
@@ -15,6 +16,12 @@ const GradeShader = {
     tDiffuse: { value: null as THREE.Texture | null },
     uVignette: { value: 0.38 },
     uDamage: { value: 0 },
+    /** golden-hour warmth 0..1 */
+    uWarm: { value: 0 },
+    /** night 0..1 – cooler, slightly desaturated */
+    uNight: { value: 0 },
+    uGrain: { value: 0 },
+    uTime: { value: 0 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -24,18 +31,35 @@ const GradeShader = {
     uniform sampler2D tDiffuse;
     uniform float uVignette;
     uniform float uDamage;
+    uniform float uWarm;
+    uniform float uNight;
+    uniform float uGrain;
+    uniform float uTime;
     varying vec2 vUv;
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
       vec4 c = texture2D(tDiffuse, vUv);
       float d = distance(vUv, vec2(0.5));
       float vig = smoothstep(0.32, 0.86, d);
-      c.rgb *= 1.0 - uVignette * vig;
+      c.rgb *= 1.0 - (uVignette + uNight * 0.12) * vig;
       c.rgb = mix(c.rgb, c.rgb * vec3(1.05, 1.0, 0.9), 0.7);
+      c.rgb *= mix(vec3(1.0), vec3(1.1, 0.99, 0.84), uWarm);
+      float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+      c.rgb = mix(c.rgb, vec3(l) * vec3(0.86, 0.96, 1.18), uNight * 0.3);
       c.rgb = mix(c.rgb, vec3(0.55, 0.02, 0.0), uDamage * vig * 0.8);
+      // film grain – stronger in the shadows, like real film
+      float g = hash(vUv * 1000.0 + fract(uTime * 7.31) * 100.0) - 0.5;
+      c.rgb += g * uGrain * (1.2 - clamp(l, 0.0, 1.0)) * max(l, 0.08);
       gl_FragColor = c;
     }
   `,
 };
+
+const _m = new THREE.Matrix4();
+const _inv = new THREE.Matrix4();
+const _v = new THREE.Vector3();
+const ORIGIN = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
 
 /** Renderer, scene, camera, lights, sky, post-processing and graphics quality management. */
 export class App {
@@ -52,6 +76,8 @@ export class App {
   onQualityChange: ((preset: QualityPreset) => void) | null = null;
   private readonly composer: EffectComposer;
   private readonly gradePass: ShaderPass;
+  private readonly bloomPass: UnrealBloomPass;
+  private time = 0;
   private readonly fpsMeter: HTMLDivElement;
   private resizeTimer: number | null = null;
   private damageFlash = 0;
@@ -94,6 +120,10 @@ export class App {
     const target = new THREE.WebGLRenderTarget(1, 1, { samples: preset.msaa, type: THREE.HalfFloatType });
     this.composer = new EffectComposer(this.renderer, target);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
+    // bloom works on the linear HDR buffer, before tone mapping in OutputPass – only really bright
+    // things (fire, lanterns, lit windows, the sun) cross the threshold
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.45, 0.45, 1.3);
+    this.composer.addPass(this.bloomPass);
     this.gradePass = new ShaderPass(GradeShader);
     this.composer.addPass(this.gradePass);
     this.composer.addPass(new OutputPass());
@@ -189,6 +219,9 @@ export class App {
         rt.dispose();
       }
     }
+    this.bloomPass.enabled = p.bloom > 0;
+    this.bloomPass.strength = p.bloom;
+    this.gradePass.uniforms.uGrain.value = p.grain;
     this.camera.far = p.drawDistance;
     this.camera.updateProjectionMatrix();
     // the sky dome must stay inside the far plane
@@ -256,6 +289,29 @@ export class App {
     else void document.documentElement.requestFullscreen().catch(() => undefined);
   }
 
+  /**
+   * Aim the sun/moon shadow at `focus` from direction `dir`. The focus is snapped to whole shadow-map
+   * texels in light space so shadow edges don't crawl while the player walks.
+   */
+  placeSun(focus: THREE.Vector3, dir: THREE.Vector3): void {
+    const p = this.preset;
+    const texel = (2 * p.shadowExtent) / p.shadowMapSize;
+    _m.lookAt(dir, ORIGIN, UP);
+    _inv.copy(_m).transpose();
+    _v.copy(focus).applyMatrix4(_inv);
+    _v.x = Math.round(_v.x / texel) * texel;
+    _v.y = Math.round(_v.y / texel) * texel;
+    _v.applyMatrix4(_m);
+    this.sun.target.position.copy(_v);
+    this.sun.position.copy(_v).addScaledVector(dir, 90);
+  }
+
+  /** Colour grade driven by the time of day: warm golden hour, cool night. */
+  setGrade(warm: number, night: number): void {
+    this.gradePass.uniforms.uWarm.value = warm;
+    this.gradePass.uniforms.uNight.value = night;
+  }
+
   flashDamage(amount: number): void {
     this.damageFlash = Math.min(1, this.damageFlash + amount);
   }
@@ -265,7 +321,9 @@ export class App {
     this.sky.mesh.position.copy(this.camera.position);
     this.damageFlash = Math.max(0, this.damageFlash - frameDt * 1.8);
     if (this.preset.postProcessing) {
+      this.time += frameDt;
       this.gradePass.uniforms.uDamage.value = this.damageFlash;
+      this.gradePass.uniforms.uTime.value = this.time;
       this.composer.render(frameDt);
     } else {
       this.renderer.render(this.scene, this.camera);

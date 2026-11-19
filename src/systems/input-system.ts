@@ -18,6 +18,7 @@ export type Action =
   | 'item4'
   | 'map'
   | 'disguise'
+  | 'draw'
   | 'confirm';
 
 const KEY_BINDINGS: Record<Action, readonly string[]> = {
@@ -40,6 +41,7 @@ const KEY_BINDINGS: Record<Action, readonly string[]> = {
   item4: ['Digit4'],
   map: ['KeyM'],
   disguise: ['KeyH'],
+  draw: ['KeyR'],
   confirm: ['Enter', 'Space'],
 };
 

@@ -40,6 +40,10 @@ User speaks Slovak; reply in Slovak. All in-game text is Slovak.
 - `systems/` – quest-system (QUEST_STEPS linear list + CHAPTER_TITLES), combat, ambush (coach raid),
   town (suspicion/alarm in Mikuláš), camera-controller, input-system (bindings), audio-manager (all procedural
   WebAudio), particle-system (InstancedMesh cubes), weapon-trail, save-manager (SaveData, flags).
+- `systems/patrol-system.ts` – drábi groups (Pandur with DRAB look, waypoint loops, sight/lose radius, respawn)
+  + friendly zbojník bands (Npc with faction 'band', help vs alerted drábi). `entities/melee-brain.ts` – shared
+  chase/windup/strike AI. `Npc` temper: calm → warned (1st hit) → hostile (2nd) → down (KO) + grudge; factions
+  'civil'/'band' are hittable by the player. Player `armed` / R draws the valaška (`CharacterModel.setSheathed`).
 - `story/dialogs.ts` – `createNpcs`, `createInteractables` (all E‑interactions: NPC talk, ladders, hideout,
   signposts, chests, coach loot…), dialog trees, `CHODNIKY`. `story/lines.ts` – barks and flavour text.
   `Interactable.lowPriority` = loses focus to anything else in reach.
@@ -60,7 +64,7 @@ Graphics sessions should stay cheap and art‑direction driven (the final look c
   buildRocks, buildRoadside), `world/props.ts` (spruce geo). Goals: richer terrain colour variation (meadow
   patches, flowers, dirt near paths), instanced grass tufts + bushes + a deciduous tree type, wind sway via
   `onBeforeCompile` on vegetation, gated by quality presets.
-- [ ] **S2 Grafika – svetlo a post‑process.** Files: `core/app.ts`, `config/quality.ts`, `world/day-night.ts`.
+- [x] **S2 Grafika – svetlo a post‑process.** Files: `core/app.ts`, `config/quality.ts`, `world/day-night.ts`.
   Goals: bloom (UnrealBloomPass, high/ultra) for fire/lanterns/sun, vignette + subtle film grain in GradeShader,
   warmer golden hour / bluer night tuning, shadow cascade-ish follow (tighter extent near player).
 - [ ] **S3 Grafika – postavy.** Files: `components/character-model.ts`, `entities/looks.ts`. Goals: better
@@ -83,3 +87,10 @@ Graphics sessions should stay cheap and art‑direction driven (the final look c
   + lone meadow trees, tinted/mossy rocks (2 shapes), wind sway on grass/bushes/crowns (+ shadows).
   Quality: `grassDensity`, `grassDistance`, `wind` (low: 0.3/38 m/off … ultra: 1/120 m/on).
   **Not tested in the browser – check startup time, FPS on low, grass poking through floors.**
+- 2026-11-19 S2: UnrealBloom (high/ultra, threshold 1.3 – flames/forge/lanterns/windows made HDR), film grain,
+  grade uWarm (golden hour) / uNight (cool, desaturated), shadow texel snapping (`App.placeSun`), warmer dawn/dusk
+  and bluer night keyframes. Quality: `bloom`, `grain`.
+- 2026-11-19 gameplay (user request): valaška sheathed behind the belt (R / first attack draws), pandúri hp 115 +
+  frontal parry, everyone attackable with warning → brawl → knock-out, drábi patrols + friendly bands (from c2).
+  Smoke-tested in headless Edge (dev server, `window.zbojnik.town()` shows drabi/bands): no console errors,
+  drábi spot & attack, bands walk. Not yet hand-played – ask the user about balance.

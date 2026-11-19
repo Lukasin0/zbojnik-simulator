@@ -42,7 +42,7 @@ export class CombatSystem {
 
   private hostile(attacker: Faction, target: Faction): boolean {
     if (attacker === 'zbojnik') return target !== 'zbojnik';
-    if (attacker === 'pandur') return target === 'zbojnik';
+    if (attacker === 'pandur') return target === 'zbojnik' || target === 'band';
     return false;
   }
 

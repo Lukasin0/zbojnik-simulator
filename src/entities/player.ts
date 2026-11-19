@@ -5,6 +5,7 @@ import type { PlayerIntent } from '@/components/input-handler';
 import type { HitSource } from '@/systems/combat-system';
 import { Cooldown } from '@/utils/timer';
 import { damp } from '@/utils/math-utils';
+import type { AnimParams } from '@/components/character-model';
 import { Actor } from './actor';
 import { COMBO, COMBO_WINDOW, HEAVY, type AttackDef } from './attacks';
 import { JANOSIK } from './looks';
@@ -22,6 +23,8 @@ export interface PlayerHooks {
   onHurt(p: Player, amount: number): void;
   onNoStamina(): void;
   onReloading(): void;
+  /** Valaška drawn from behind the belt (true) or tucked away (false) – at the moment it changes hands. */
+  onDraw?(p: Player, armed: boolean): void;
 }
 
 /** Juraj Jánošík – controlled by the player. */
@@ -49,10 +52,63 @@ export class Player extends Actor {
   private staminaDelay = 0;
   private invuln = 0;
   private aimHold = 0;
+  /** Valaška in the hand (true) or tucked behind the belt. */
+  private armedState = false;
+  /** -1 = idle, else 0..1 progress of drawing / sheathing */
+  private drawT = -1;
+  private drawTo = false;
+  /** Attack clicked while the valaška was still behind the belt – swing as soon as it is out. */
+  private pendingAttack: 'light' | 'heavy' | null = null;
 
   constructor(parent: THREE.Object3D) {
     super(JANOSIK, parent, T.baseHp);
     this.body.radius = 0.38;
+    this.model.setSheathed(true);
+  }
+
+  get armed(): boolean {
+    return this.armedState;
+  }
+
+  /** Put the valaška away (or out) without the animation – dialogs, respawn, cutscenes. */
+  setArmed(on: boolean): void {
+    this.armedState = on;
+    this.drawT = -1;
+    this.pendingAttack = null;
+    this.model.setSheathed(!on);
+  }
+
+  private startDraw(to: boolean): void {
+    if (this.drawT >= 0 || this.armedState === to) return;
+    this.drawT = 0;
+    this.drawTo = to;
+  }
+
+  private updateDraw(dt: number, intent: PlayerIntent, hooks: PlayerHooks): void {
+    if (intent.draw && !this.attacking) this.startDraw(!this.armedState);
+    if (this.drawT < 0) return;
+    const before = this.drawT;
+    this.drawT += dt / (this.drawTo ? T.drawTime : T.sheatheTime);
+    // the hand reaches the belt halfway through – that's when the valaška changes place
+    if (before < 0.5 && this.drawT >= 0.5) {
+      this.armedState = this.drawTo;
+      this.model.setSheathed(!this.drawTo);
+      hooks.onDraw?.(this, this.drawTo);
+    }
+    if (this.drawT >= 1) {
+      this.drawT = -1;
+      const pend = this.pendingAttack;
+      this.pendingAttack = null;
+      if (pend && this.armedState) {
+        const def = pend === 'heavy' ? HEAVY : COMBO[0];
+        this.comboStep = 0;
+        if (this.canPay(def.stamina, hooks)) this.startAttack(def, intent.aimYaw, hooks);
+      }
+    }
+  }
+
+  protected override animParams(): AnimParams {
+    return { ...super.animParams(), draw: this.drawT };
   }
 
   get attacking(): boolean {
@@ -143,6 +199,7 @@ export class Player extends Actor {
       }
     }
 
+    this.updateDraw(dt, intent, hooks);
     this.updateMelee(dt, intent, hooks);
 
     if (intent.shoot && !this.attacking) {
@@ -170,6 +227,14 @@ export class Player extends Actor {
     this.sinceAttack += dt;
     if (this.sinceAttack > COMBO_WINDOW && !this.attacking) this.comboStep = 0;
 
+    if (!this.armedState || this.drawT >= 0) {
+      // the first click pulls the valaška from behind the belt; the swing follows right after
+      if (intent.attack || intent.heavy) {
+        if (!this.armedState) this.startDraw(true);
+        if (this.drawTo) this.pendingAttack = intent.heavy ? 'heavy' : 'light';
+      }
+      return;
+    }
     if (!this.attacking) {
       if (intent.heavy) {
         if (this.canPay(HEAVY.stamina, hooks)) this.startAttack(HEAVY, intent.aimYaw, hooks);
