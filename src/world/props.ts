@@ -508,6 +508,95 @@ export function createSpruceGeometries(): { trunk: THREE.BufferGeometry; crown: 
   return { trunk, crown: mergeGeometries(cones, false) ?? cones[0] };
 }
 
+/** Broadleaf tree (buk / javor): trunk with two boughs + a crown of lumpy blobs. Crown top ≈ 6.6 m. */
+export function createDeciduousGeometries(): { trunk: THREE.BufferGeometry; crown: THREE.BufferGeometry } {
+  const boughs = [
+    new THREE.CylinderGeometry(0.13, 0.25, 3.4, 6).translate(0, 1.7, 0),
+    new THREE.CylinderGeometry(0.05, 0.1, 1.6, 4).rotateZ(0.8).translate(0.55, 3.1, 0),
+    new THREE.CylinderGeometry(0.05, 0.1, 1.4, 4).rotateZ(-0.7).rotateY(2).translate(-0.3, 3.0, 0.4),
+  ].map((g) => g.toNonIndexed());
+  const blobs: [number, number, number, number][] = [
+    [0, 4.6, 0, 1.75],
+    [1.05, 4.0, 0.35, 1.2],
+    [-0.95, 4.15, -0.3, 1.25],
+    [0.2, 4.0, -1.0, 1.1],
+    [-0.25, 5.5, 0.4, 1.15],
+  ];
+  const crown = blobs.map(([x, y, z, r]) => new THREE.IcosahedronGeometry(r, 0).scale(1, 0.85, 1).translate(x, y, z));
+  return {
+    trunk: mergeGeometries(boughs, false) ?? boughs[0],
+    crown: mergeGeometries(crown, false) ?? crown[0],
+  };
+}
+
+/** Low shrub (lieska, baza) – a few blobs, top ≈ 1.3 m. */
+export function createBushGeometry(): THREE.BufferGeometry {
+  const blobs = [
+    new THREE.IcosahedronGeometry(0.75, 0).scale(1, 0.8, 1).translate(0, 0.55, 0),
+    new THREE.IcosahedronGeometry(0.55, 0).translate(0.6, 0.4, 0.15),
+    new THREE.IcosahedronGeometry(0.5, 0).translate(-0.45, 0.35, -0.35),
+    new THREE.IcosahedronGeometry(0.42, 0).translate(0.1, 0.95, 0.1),
+  ];
+  return mergeGeometries(blobs, false) ?? blobs[0];
+}
+
+/**
+ * Grass tuft: `blades` thin leaning triangles, vertex colours dark at the root → light at the tip
+ * (multiplied by the instance colour). Normals point up so the tuft lights like the ground.
+ */
+export function createGrassTuftGeometry(blades = 6, seed = 7): THREE.BufferGeometry {
+  let s = seed;
+  const rnd = (): number => {
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+  const pos: number[] = [];
+  const col: number[] = [];
+  for (let i = 0; i < blades; i++) {
+    const a = (i / blades) * Math.PI * 2 + rnd() * 0.8;
+    const r = rnd() * 0.12;
+    const bx = Math.cos(a) * r;
+    const bz = Math.sin(a) * r;
+    const w = 0.035 + rnd() * 0.03;
+    const h = 0.32 + rnd() * 0.3;
+    const lean = 0.08 + rnd() * 0.14;
+    const px = -Math.sin(a) * w;
+    const pz = Math.cos(a) * w;
+    const tx = bx + Math.cos(a) * lean;
+    const tz = bz + Math.sin(a) * lean;
+    // both windings, so the blade is visible from each side with the same (upward) normal
+    pos.push(bx - px, 0, bz - pz, bx + px, 0, bz + pz, tx, h, tz);
+    pos.push(bx + px, 0, bz + pz, bx - px, 0, bz - pz, tx, h, tz);
+    for (let k = 0; k < 2; k++) col.push(0.55, 0.6, 0.5, 0.55, 0.6, 0.5, 1.12, 1.15, 0.95);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  const n = new Float32Array(pos.length);
+  for (let i = 1; i < n.length; i += 3) n[i] = 1;
+  g.setAttribute('normal', new THREE.BufferAttribute(n, 3));
+  return g;
+}
+
+/** Wildflower head on a hair-thin stem; the head is tinted by the instance colour (stem stays dark). */
+export function createFlowerGeometry(): THREE.BufferGeometry {
+  const head = new THREE.OctahedronGeometry(0.055, 0).scale(1, 0.55, 1).translate(0, 0.36, 0).toNonIndexed();
+  const stem = new THREE.BufferGeometry();
+  stem.setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute([-0.008, 0, 0, 0.008, 0, 0, 0, 0.34, 0, 0.008, 0, 0, -0.008, 0, 0, 0, 0.34, 0], 3),
+  );
+  stem.computeVertexNormals();
+  const tint = (g: THREE.BufferGeometry, v: number): void => {
+    const c = new Float32Array(g.getAttribute('position').count * 3).fill(v);
+    g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  };
+  tint(head, 1);
+  tint(stem, 0.25);
+  head.deleteAttribute('uv');
+  return mergeGeometries([head, stem], false) ?? head;
+}
+
 /** Coach with team of horses. Front faces +Z. */
 export function createCoachModel(): { root: THREE.Group; wheels: THREE.Object3D[]; legs: THREE.Object3D[] } {
   const root = new THREE.Group();

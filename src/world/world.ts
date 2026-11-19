@@ -1,16 +1,19 @@
 import * as THREE from 'three';
 import { BOUNDS_MARGIN, BROKEN_LADDER, GORGE, GORGE_STEPS, LOC, REGIONS, WATER_LEVEL, WORLD_SIZE } from '@/config/constants';
 import type { GroundProvider } from '@/components/physics-body';
-import { fbm, lerp, mulberry32, randRange, smoothstep } from '@/utils/math-utils';
+import { lerp, mulberry32, randRange, smoothstep } from '@/utils/math-utils';
 import { bakeStatic, mat } from './materials';
 import { Mist } from './mist';
 import type { NightReceiver } from './day-night';
-import { Terrain, gorgeAt, gorgeFloor, isMud, outsideDistance, pathDistance, riverZ, roadZ } from './terrain';
+import { Terrain, forestNoise, gorgeAt, gorgeFloor, isMud, outsideDistance, pathDistance, riverZ, roadZ } from './terrain';
+import { Vegetation, applyWind, windDepthMaterial, type WindOptions } from './vegetation';
 import {
   createBarrel,
   createBedding,
   createBench,
+  createBushGeometry,
   createCaveMouth,
+  createDeciduousGeometries,
   createLadder,
   createLeanTo,
   createCastle,
@@ -131,6 +134,8 @@ export class World implements GroundProvider, NightReceiver {
   /** Meshes the third-person camera must stay in front of. */
   readonly occluders: THREE.Object3D[] = [];
   readonly mist: Mist;
+  /** Grass, wildflowers and the wind uniforms shared by all vegetation. */
+  readonly vegetation = new Vegetation();
   /** Where each villager goes to bed – a spot just outside their door. */
   readonly doors: Record<string, THREE.Vector3> = {};
   /** Where the Mikuláš market vendors stand – behind their stalls. */
@@ -199,6 +204,9 @@ export class World implements GroundProvider, NightReceiver {
     this.addCircle(ax, az, 0.6);
     this.buildForest();
     this.buildRocks();
+    this.buildBushes();
+    this.vegetation.buildGrass(this, -250, 480, -250, 250);
+    this.root.add(this.vegetation.root);
     this.mist = new Mist((x, z) => this.groundHeight(x, z));
     this.root.add(this.mist.root);
     this.windowMaterial.emissive.set(0xffa040);
@@ -254,6 +262,21 @@ export class World implements GroundProvider, NightReceiver {
 
   groundHeight(x: number, z: number): number {
     return this.terrain.height(x, z);
+  }
+
+  /** True if any collider (grown by `pad`) covers the point – used to keep grass out of houses. */
+  isBlocked(x: number, z: number, pad: number): boolean {
+    const near = new Set<number>();
+    for (const [ox, oz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      this.grid.get(this.cellKey(Math.floor((x + ox * pad) / CELL), Math.floor((z + oz * pad) / CELL)))?.forEach((i) => near.add(i));
+    }
+    for (const i of near) {
+      const c = this.colliders[i];
+      if (c.kind === 'circle') {
+        if (Math.hypot(x - c.x, z - c.z) < c.r + pad) return true;
+      } else if (x > c.minX - pad && x < c.maxX + pad && z > c.minZ - pad && z < c.maxZ + pad) return true;
+    }
+    return false;
   }
 
   resolveCircle(p: THREE.Vector3, radius: number): boolean {
@@ -816,40 +839,26 @@ export class World implements GroundProvider, NightReceiver {
     return spots.some(([sx, sz, r]) => Math.hypot(x - sx, z - sz) < r);
   }
 
-  private buildForest(): void {
-    const { trunk, crown } = createSpruceGeometries();
-    const transforms: THREE.Matrix4[] = [];
-    const m = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const s = new THREE.Vector3();
-    const p = new THREE.Vector3();
-    for (let i = 0; i < 11000 && transforms.length < 2000; i++) {
-      const x = randRange(this.rng, -240, 470);
-      const z = randRange(this.rng, -240, 240);
-      const out = outsideDistance(x, z);
-      if (out > 78) continue;
-      // denser forest north of the ambush spot (cover for the zbojníci)
-      const nearAmbush = Math.hypot(x - LOC.ambushX, z - (roadZ(LOC.ambushX) - 25)) < 28;
-      const density = fbm(x * 0.018 + 11, z * 0.018 - 4, 3) + (nearAmbush ? 0.25 : 0) + (out > 10 ? 0.15 : 0);
-      if (density < 0.52) continue;
-      if (this.blockedForTrees(x, z)) continue;
-      const h = this.groundHeight(x, z);
-      if (h > 34 || h < 0.3) continue;
-      const scale = 0.8 + this.rng() * 0.8;
-      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.rng() * Math.PI * 2);
-      s.set(scale, scale * (0.85 + this.rng() * 0.4), scale);
-      p.set(x, h - 0.1, z);
-      transforms.push(m.compose(p, q, s).clone());
-      if (out < BOUNDS_MARGIN + 2) this.addCircle(x, z, 0.32 * scale);
-    }
-    const trunks = new THREE.InstancedMesh(trunk, mat(0x5a3c26), transforms.length);
-    const crowns = new THREE.InstancedMesh(crown, mat(0x2f4f2a), transforms.length);
-    const tint = new THREE.Color();
+  /** Instanced trunk + wind-swayed crown pair (spruce or broadleaf). */
+  private addTrees(
+    geo: { trunk: THREE.BufferGeometry; crown: THREE.BufferGeometry },
+    transforms: THREE.Matrix4[],
+    trunkColor: number,
+    crownColor: number,
+    wind: WindOptions,
+    tint: (c: THREE.Color) => void,
+  ): void {
+    if (transforms.length === 0) return;
+    const crownMat = applyWind(new THREE.MeshStandardMaterial({ color: crownColor, flatShading: true, roughness: 0.9 }), this.vegetation.wind, wind);
+    const trunks = new THREE.InstancedMesh(geo.trunk, mat(trunkColor), transforms.length);
+    const crowns = new THREE.InstancedMesh(geo.crown, crownMat, transforms.length);
+    crowns.customDepthMaterial = windDepthMaterial(this.vegetation.wind, wind);
+    const c = new THREE.Color();
     transforms.forEach((t, i) => {
       trunks.setMatrixAt(i, t);
       crowns.setMatrixAt(i, t);
-      tint.setHSL(0.3 + this.rng() * 0.05, 0.35 + this.rng() * 0.15, 0.55 + this.rng() * 0.3);
-      crowns.setColorAt(i, tint);
+      tint(c);
+      crowns.setColorAt(i, c);
     });
     for (const im of [trunks, crowns]) {
       im.castShadow = true;
@@ -860,28 +869,126 @@ export class World implements GroundProvider, NightReceiver {
     this.occluders.push(crowns);
   }
 
-  private buildRocks(): void {
-    const geo = new THREE.DodecahedronGeometry(1, 0);
+  private buildForest(): void {
+    const spruces: THREE.Matrix4[] = [];
+    const broadleaf: THREE.Matrix4[] = [];
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const s = new THREE.Vector3();
+    const p = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 1, 0);
+    const plant = (list: THREE.Matrix4[], x: number, h: number, z: number, scale: number, stretch: number, out: number): void => {
+      q.setFromAxisAngle(up, this.rng() * Math.PI * 2);
+      s.set(scale, scale * stretch, scale);
+      list.push(m.compose(p.set(x, h - 0.1, z), q, s).clone());
+      if (out < BOUNDS_MARGIN + 2) this.addCircle(x, z, 0.32 * scale);
+    };
+    for (let i = 0; i < 14000 && spruces.length + broadleaf.length < 2500; i++) {
+      const x = randRange(this.rng, -240, 470);
+      const z = randRange(this.rng, -240, 240);
+      const out = outsideDistance(x, z);
+      if (out > 78) continue;
+      // denser forest north of the ambush spot (cover for the zbojníci)
+      const nearAmbush = Math.hypot(x - LOC.ambushX, z - (roadZ(LOC.ambushX) - 25)) < 28;
+      const density = forestNoise(x, z) + (nearAmbush ? 0.25 : 0) + (out > 10 ? 0.15 : 0);
+      // the forest edge (and lone meadow trees) are broadleaf; the deep forest is spruce
+      const edge = density >= 0.44 && density < 0.53 && this.rng() < 0.55;
+      const lone = density < 0.44 && out < 0 && this.rng() < 0.012;
+      if (density < 0.52 && !edge && !lone) continue;
+      if (this.blockedForTrees(x, z)) continue;
+      const h = this.groundHeight(x, z);
+      if (h > 34 || h < 0.3) continue;
+      if (edge || lone || (h < 9 && this.rng() < 0.15)) {
+        if (h > 20) continue;
+        plant(broadleaf, x, h, z, 0.75 + this.rng() * 0.6 + (lone ? 0.25 : 0), 0.85 + this.rng() * 0.3, out);
+      } else {
+        plant(spruces, x, h, z, 0.8 + this.rng() * 0.8, 0.85 + this.rng() * 0.4, out);
+      }
+    }
+    this.addTrees(createSpruceGeometries(), spruces, 0x5a3c26, 0x2f4f2a, { height: 7, amp: 0.22, speed: 0.9 }, (c) =>
+      c.setHSL(0.3 + this.rng() * 0.05, 0.35 + this.rng() * 0.15, 0.55 + this.rng() * 0.3),
+    );
+    // buk / javor / jaseň – lighter, warmer greens, a few already yellowing
+    this.addTrees(createDeciduousGeometries(), broadleaf, 0x6b5440, 0x5d8a3a, { height: 6.5, amp: 0.3, speed: 1.2 }, (c) => {
+      const autumn = this.rng() < 0.08;
+      c.setHSL(autumn ? 0.13 + this.rng() * 0.04 : 0.2 + this.rng() * 0.07, 0.35 + this.rng() * 0.25, 0.75 + this.rng() * 0.3);
+    });
+  }
+
+  /** Shrubs along forest edges, the Váh banks and the hradská. Walk-through (no colliders). */
+  private buildBushes(): void {
     const list: THREE.Matrix4[] = [];
-    for (let i = 0; i < 900 && list.length < 290; i++) {
+    const q = new THREE.Quaternion();
+    const up = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < 9000 && list.length < 900; i++) {
+      const x = randRange(this.rng, -240, 470);
+      const z = randRange(this.rng, -240, 240);
+      const out = outsideDistance(x, z);
+      if (out > 40) continue;
+      const fd = forestNoise(x, z) + (out > 10 ? 0.15 : 0);
+      const dRiver = Math.abs(z - riverZ(x));
+      const dRoad = Math.abs(z - roadZ(x));
+      const ok =
+        (fd > 0.4 && fd < 0.56) ||
+        (dRiver > 15 && dRiver < 22 && this.rng() < 0.5) ||
+        (dRoad > 9 && dRoad < 13 && this.rng() < 0.25);
+      if (!ok || this.blockedForTrees(x, z) || this.isBlocked(x, z, 1)) continue;
+      const h = this.groundHeight(x, z);
+      if (h < 0.3 || h > 24) continue;
+      const sc = 0.6 + this.rng() * 0.8;
+      q.setFromAxisAngle(up, this.rng() * Math.PI * 2);
+      list.push(new THREE.Matrix4().compose(new THREE.Vector3(x, h - 0.15, z), q, new THREE.Vector3(sc, sc * (0.7 + this.rng() * 0.5), sc)));
+    }
+    if (list.length === 0) return;
+    const wind: WindOptions = { height: 1.3, amp: 0.1, speed: 1.6 };
+    const material = applyWind(new THREE.MeshStandardMaterial({ color: 0x4f7a33, flatShading: true, roughness: 0.95 }), this.vegetation.wind, wind);
+    const bushes = new THREE.InstancedMesh(createBushGeometry(), material, list.length);
+    bushes.customDepthMaterial = windDepthMaterial(this.vegetation.wind, wind);
+    const c = new THREE.Color();
+    list.forEach((mtx, i) => {
+      bushes.setMatrixAt(i, mtx);
+      c.setHSL(0.22 + this.rng() * 0.08, 0.3 + this.rng() * 0.2, 0.7 + this.rng() * 0.3);
+      bushes.setColorAt(i, c);
+    });
+    bushes.castShadow = true;
+    bushes.receiveShadow = true;
+    bushes.computeBoundingSphere();
+    this.root.add(bushes);
+  }
+
+  private buildRocks(): void {
+    const geos = [new THREE.DodecahedronGeometry(1, 0), new THREE.IcosahedronGeometry(1, 0)];
+    const lists: { m: THREE.Matrix4; c: THREE.Color }[][] = [[], []];
+    for (let i = 0; i < 1100 && lists[0].length + lists[1].length < 340; i++) {
       const x = randRange(this.rng, -230, 460);
       const z = randRange(this.rng, -230, 230);
       const out = outsideDistance(x, z);
       if (out > 70 || this.blockedForTrees(x, z)) continue;
       const scale = 0.4 + this.rng() * 1.4 + (out > 15 ? 2 : 0);
+      const flat = this.rng() < 0.3 ? 0.45 : 0.7;
       const m = new THREE.Matrix4().compose(
-        new THREE.Vector3(x, this.groundHeight(x, z), z),
+        new THREE.Vector3(x, this.groundHeight(x, z) - scale * 0.1, z),
         new THREE.Quaternion().setFromEuler(new THREE.Euler(this.rng() * 3, this.rng() * 3, 0)),
-        new THREE.Vector3(scale, scale * 0.7, scale),
+        new THREE.Vector3(scale * (0.8 + this.rng() * 0.5), scale * flat, scale),
       );
-      list.push(m);
+      // grey limestone, a few warmer/browner ones, mossy in the forest
+      const c = new THREE.Color().setHSL(0.08 + this.rng() * 0.05, 0.05 + this.rng() * 0.1, 0.42 + this.rng() * 0.16, THREE.SRGBColorSpace);
+      if (forestNoise(x, z) > 0.5 && out < 10) c.lerp(new THREE.Color(0x5f7a45), 0.35 + this.rng() * 0.25);
+      lists[this.rng() < 0.6 ? 0 : 1].push({ m, c });
       if (scale > 0.9 && out < BOUNDS_MARGIN) this.addCircle(x, z, scale * 0.8);
     }
-    const rocks = new THREE.InstancedMesh(geo, mat(0x7f7b74), list.length);
-    list.forEach((m, i) => rocks.setMatrixAt(i, m));
-    rocks.castShadow = true;
-    rocks.receiveShadow = true;
-    this.root.add(rocks);
+    lists.forEach((list, k) => {
+      if (list.length === 0) return;
+      const rocks = new THREE.InstancedMesh(geos[k], mat(0xffffff), list.length);
+      list.forEach(({ m, c }, i) => {
+        rocks.setMatrixAt(i, m);
+        rocks.setColorAt(i, c);
+      });
+      rocks.castShadow = true;
+      rocks.receiveShadow = true;
+      rocks.computeBoundingSphere();
+      this.root.add(rocks);
+    });
   }
 
   // --- Per-frame -------------------------------------------------------------------

@@ -26,6 +26,12 @@ export interface QualityPreset {
   mist: boolean;
   /** Rain streaks rendered around the camera at full downpour. */
   rainDrops: number;
+  /** Fraction of grass tufts / wildflowers drawn (0 = none). */
+  grassDensity: number;
+  /** Camera distance where grass has faded out. */
+  grassDistance: number;
+  /** Wind sway on grass, bushes and tree crowns. */
+  wind: boolean;
 }
 
 export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
@@ -45,6 +51,9 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     clouds: false,
     mist: false,
     rainDrops: 700,
+    grassDensity: 0.3,
+    grassDistance: 38,
+    wind: false,
   },
   medium: {
     label: 'Stredná',
@@ -62,6 +71,9 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     clouds: true,
     mist: true,
     rainDrops: 1700,
+    grassDensity: 0.6,
+    grassDistance: 58,
+    wind: true,
   },
   high: {
     label: 'Vysoká',
@@ -79,6 +91,9 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     clouds: true,
     mist: true,
     rainDrops: 3500,
+    grassDensity: 1,
+    grassDistance: 85,
+    wind: true,
   },
   ultra: {
     label: 'Ultra',
@@ -96,6 +111,9 @@ export const QUALITY_PRESETS: Record<QualityLevel, QualityPreset> = {
     clouds: true,
     mist: true,
     rainDrops: 5000,
+    grassDensity: 1,
+    grassDistance: 120,
+    wind: true,
   },
 };
 

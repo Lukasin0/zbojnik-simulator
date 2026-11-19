@@ -207,7 +207,49 @@ const C = {
   field: new THREE.Color(0x5e4630),
   cobble: new THREE.Color(0x8a8378),
   cobbleDark: new THREE.Color(0x837b70),
+  /** sunny meadow (lúka) */
+  meadow: new THREE.Color(0x93a24c),
+  /** lush wet grass by the Váh */
+  lush: new THREE.Color(0x4c7a36),
+  /** dry upland grass / hole */
+  dry: new THREE.Color(0x968d58),
+  dirt: new THREE.Color(0x7a6245),
+  scree: new THREE.Color(0x918a7e),
+  flowerY: new THREE.Color(0xc2b244),
+  flowerP: new THREE.Color(0x8e7b98),
 };
+
+/** Same noise the spruce forest is scattered with (≥ ~0.52 = trees). */
+export function forestNoise(x: number, z: number): number {
+  return fbm(x * 0.018 + 11, z * 0.018 - 4, 3);
+}
+
+/** Large sunny meadow patches, 0..1. */
+export function meadowNoise(x: number, z: number): number {
+  return smoothstep(0.48, 0.7, fbm(x * 0.011 - 30, z * 0.011 + 70, 3));
+}
+
+/** Wildflower patches inside meadows, 0..1. */
+export function flowerNoise(x: number, z: number): number {
+  return smoothstep(0.6, 0.8, valueNoise(x * 0.09 + 7, z * 0.09 - 3)) * (0.35 + meadowNoise(x, z) * 0.65);
+}
+
+/** 0..1 – how thick grass tufts grow here (follows the colorAt rules). 0 on roads, rock, water, mud… */
+export function grassCover(x: number, z: number, h: number, slope: number): number {
+  if (h < 0.3 || h > 27 || slope > 0.75) return 0;
+  if (isSquare(x, z)) return 0;
+  if (h < 8 && (Math.abs(z - roadZ(x)) < ROAD_HALF_WIDTH + 0.6 || isMud(x, z))) return 0;
+  if (Math.abs(x - LOC.field.x) < 10 && Math.abs(z - LOC.field.z) < 7) return 0;
+  const g = gorgeAt(x, z);
+  if (g.dist < g.r + 1.5) return 0;
+  const dp = pathDistance(x, z);
+  if (dp < 2) return 0;
+  let c = 0.3 + meadowNoise(x, z) * 0.6 + valueNoise(x * 0.15, z * 0.15) * 0.25;
+  c *= smoothstep(2, 4.5, dp);
+  c *= 1 - smoothstep(18, 27, h);
+  c *= 1 - smoothstep(0.55, 0.72, forestNoise(x, z)) * 0.65;
+  return clamp(c, 0, 1);
+}
 
 export function colorAt(x: number, z: number, h: number, slope: number, out: THREE.Color): THREE.Color {
   if (h < WATER_LEVEL + 0.1) return out.copy(C.bed);
@@ -221,11 +263,30 @@ export function colorAt(x: number, z: number, h: number, slope: number, out: THR
   const g = gorgeAt(x, z);
   if (g.dist < g.r + 0.5 && g.along > 12) return out.copy(C.rock).lerp(C.path, 0.45);
   if (h > 46) return out.copy(C.snow);
-  if (slope > 0.85 || h > 30) return out.copy(C.rock);
-  if (pathDistance(x, z) < 1.7) return out.copy(C.path);
-  const n = fbm(x * 0.03, z * 0.03, 3);
-  out.copy(C.grassA).lerp(C.grassB, n);
-  if (fbm(x * 0.02 + 50, z * 0.02 - 20, 3) > 0.55) out.lerp(C.forest, 0.6);
+  if (slope > 0.85 || h > 30) {
+    out.copy(C.rock).lerp(C.scree, valueNoise(x * 0.21, z * 0.21));
+    return out.lerp(C.snow, smoothstep(38, 46, h) * 0.55);
+  }
+  const dp = pathDistance(x, z);
+  if (dp < 1.7) return out.copy(C.path);
+  out.copy(C.grassA).lerp(C.grassB, fbm(x * 0.03, z * 0.03, 3));
+  const meadow = meadowNoise(x, z);
+  out.lerp(C.meadow, meadow * 0.55);
+  out.lerp(C.lush, (1 - smoothstep(14, 32, Math.abs(z - riverZ(x)))) * 0.5);
+  // drier, yellower grass up on the slopes towards the hole
+  out.lerp(C.dry, Math.min(0.7, smoothstep(12, 27, h) * 0.55 + smoothstep(0.45, 0.85, slope) * 0.3));
+  // darker needle-strewn floor under the spruces + old patchy variation
+  out.lerp(C.forest, Math.max(smoothstep(0.47, 0.6, forestNoise(x, z)) * 0.55, fbm(x * 0.02 + 50, z * 0.02 - 20, 3) > 0.55 ? 0.45 : 0));
+  // wildflower tinge – yellow (iskerník) or violet (zvonček / vres)
+  const fl = flowerNoise(x, z);
+  if (fl > 0.05) out.lerp(valueNoise(x * 0.03 - 9, z * 0.03 + 4) > 0.55 ? C.flowerP : C.flowerY, fl * 0.32);
+  // trodden dirt along chodníky and the hradská
+  const dRoad = h < 8 ? Math.abs(z - roadZ(x)) - ROAD_HALF_WIDTH : 99;
+  const worn = Math.max(1 - smoothstep(1.7, 4.2, dp), 1 - smoothstep(0, 3.8, dRoad));
+  out.lerp(C.dirt, worn * (0.35 + valueNoise(x * 0.4, z * 0.4) * 0.4));
+  // trampled patches around the village
+  const dv = Math.hypot(x - LOC.village.x, z - LOC.village.z);
+  out.lerp(C.dirt, (1 - smoothstep(12, 38, dv)) * 0.3 * valueNoise(x * 0.2 + 9, z * 0.2));
   return out;
 }
 

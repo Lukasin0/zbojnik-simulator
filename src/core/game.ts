@@ -147,6 +147,8 @@ export class Game {
   onPrologueEnd: (() => void) | null = null;
   private interactables: Interactable[] = [];
   private focused: Interactable | null = null;
+  /** The signpost we just arrived at stays silent until the player walks away from it. */
+  private arrivalSign: { id: string; pos: THREE.Vector3 } | null = null;
   private readonly inputHandler: PlayerInputHandler;
   private readonly marker: THREE.Mesh;
   private burnCd = 0;
@@ -171,9 +173,11 @@ export class Game {
     this.weather.setDropCount(app.preset.rainDrops);
     this.particles.density = app.preset.particleDensity;
     this.world.mist.setEnabled(app.preset.mist);
+    this.world.vegetation.setQuality(app.preset);
     app.onQualityChange = (p) => {
       this.particles.density = p.particleDensity;
       this.world.mist.setEnabled(p.mist);
+      this.world.vegetation.setQuality(p);
       this.weather.setDropCount(p.rainDrops);
     };
     this.cameraCtl = new CameraController(app.camera, (x, z) => this.world.groundHeight(x, z));
@@ -487,6 +491,7 @@ export class Game {
     if (!dest) return;
     this.dayNight.setTime(this.dayNight.time + 1);
     this.player.teleport(dest.x + 1.5, dest.z + 1.5, this.world);
+    this.arrivalSign = { id: `chodnik-${to}`, pos: dest };
     this.companions.forEach((c, i) => c.teleport(dest.x - 1 + i, dest.z + 3, this.world));
     this.cameraCtl.snap(this.player.position, this.player.facing);
     this.toast(`Zbojníckymi chodníkmi cez hory… o hodinu ste v cieli: ${CHODNIKY[to] ?? to}.`, 'info');
@@ -1169,12 +1174,16 @@ export class Game {
   private updateInteraction(): void {
     this.focused = null;
     if (!this.player.isAlive()) return;
-    let best = 99;
+    if (this.arrivalSign && this.arrivalSign.pos.distanceTo(this.player.position) > 3.5) this.arrivalSign = null;
+    // low-priority spots (signposts) only win when nothing else is in reach
+    let best = Infinity;
     for (const it of this.interactables) {
+      if (it.id === this.arrivalSign?.id) continue;
       const d = it.position().distanceTo(this.player.position);
-      if (d > it.radius || d >= best) continue;
+      const score = d + (it.lowPriority ? 1000 : 0);
+      if (d > it.radius || score >= best) continue;
       if (it.label() === null) continue;
-      best = d;
+      best = score;
       this.focused = it;
     }
     if (this.focused && this.input.justPressed('interact')) {
@@ -1419,6 +1428,7 @@ export class Game {
       this.world.groundHeight(x, z),
     );
     this.dayNight.apply(this.app, this.world, this.player.model.root.position, frameDt, this.weather);
+    this.world.vegetation.update(this.time, this.app.camera.position, this.weather.wind);
     const w = this.weather.label();
     this.hud.setClock(
       `${this.dayNight.clock()} · ${this.dayNight.periodName()}${w ? ` · ${w}` : ''}`,
@@ -1501,6 +1511,7 @@ export class Game {
     // the title screen lives in an eternal golden sunset by the bonfire
     this.dayNight.setTime(19.45);
     this.dayNight.apply(this.app, this.world, v, frameDt, null);
+    this.world.vegetation.update(this.menuTime, this.app.camera.position, 0.15);
     if (this.rng() < 0.6) {
       const f = this.world.fires[0];
       if (f) this.particles.emit({ x: f.pos.x, y: f.pos.y + 0.6, z: f.pos.z, count: 1, spread: 0.8, speed: 0.3, up: 2.2, gravity: 1.5, drag: 0.5, color: [0xffb040, 0xff6a10], life: [0.5, 1.1], size: [0.1, 0.2] });

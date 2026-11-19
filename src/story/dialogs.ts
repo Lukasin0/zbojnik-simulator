@@ -57,6 +57,8 @@ export interface Interactable {
   /** null = not available right now */
   label(): string | null;
   act(): void;
+  /** Any other available interactable in range wins over this one (signposts). */
+  lowPriority?: boolean;
 }
 
 export function createNpcs(game: Game): Npc[] {
@@ -735,6 +737,7 @@ function signpostInteractables(game: Game): Interactable[] {
   return Object.entries(game.world.signposts).map(([id, pos]) => ({
     id: `chodnik-${id}`,
     radius: 2.4,
+    lowPriority: true,
     position: () => pos,
     label: () => (game.data.flags.chodniky ? 'Zbojnícky chodník – kam pôjdeme?' : null),
     act: () =>
