@@ -67,7 +67,7 @@ Graphics sessions should stay cheap and art‑direction driven (the final look c
 - [x] **S2 Grafika – svetlo a post‑process.** Files: `core/app.ts`, `config/quality.ts`, `world/day-night.ts`.
   Goals: bloom (UnrealBloomPass, high/ultra) for fire/lanterns/sun, vignette + subtle film grain in GradeShader,
   warmer golden hour / bluer night tuning, shadow cascade-ish follow (tighter extent near player).
-- [ ] **S3 Grafika – postavy.** Files: `components/character-model.ts`, `entities/looks.ts`. Goals: better
+- [x] **S3 Grafika – postavy.** Files: `components/character-model.ts`, `entities/looks.ts`. Goals: better
   proportions, faces (eyes, mustache), cloth details (opasok, krpce, vest embroidery), smoother pose blending.
 - [ ] **S4 Kapitola 6a – Likavský hrad.** Files: `world/world.ts` (new `buildCastleInterior`), `world/props.ts`,
   `entities/enemy.ts`. Goals: walkable castle (courtyard, gate, dungeon), night guards with lanterns on
@@ -94,3 +94,8 @@ Graphics sessions should stay cheap and art‑direction driven (the final look c
   frontal parry, everyone attackable with warning → brawl → knock-out, drábi patrols + friendly bands (from c2).
   Smoke-tested in headless Edge (dev server, `window.zbojnik.town()` shows drabi/bands): no console errors,
   drábi spot & attack, bands walk. Not yet hand-played – ask the user about balance.
+- 2026-11-19 S3: faces (sclera+iris, brows, ears, mouth that moves when talking, blinking, drooping fúzy), krpce with
+  laces, vest embroidery (`vestTrim`), belt studs (`beltStuds`), bigger hands, all joints eased (damp 18, swings 45,
+  spin raw). GDD §3.5 now has a character art bible for the Unity port. Debug `zbojnik.zoom(d)` added.
+  **Art direction:** the final AAA look is made in Unity – keep web-prototype art cheap and data-driven
+  (`CharacterLook` fields = modular costume parts), document intent in the GDD instead of polishing meshes.

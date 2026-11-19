@@ -17,6 +17,9 @@ export const JANOSIK: CharacterLook = {
   braids: true,
   weapon: 'valaska',
   pistol: true,
+  krpce: true,
+  beltStuds: true,
+  eyeColor: 0x3a2a18,
 };
 
 export const UHORCIK: CharacterLook = {
@@ -24,6 +27,7 @@ export const UHORCIK: CharacterLook = {
   skin: 0xcf9d7c,
   hair: 0x5a5048,
   vest: 0x6b4a2f,
+  vestTrim: 0xd8b440,
   braids: false,
   mustache: true,
   beard: 0x5a5048,
@@ -34,6 +38,7 @@ export const ILCIK: CharacterLook = {
   ...JANOSIK,
   hair: 0x7a4a22,
   vest: 0x8f2a22,
+  vestTrim: 0x3a6a2a,
   braids: false,
   mustache: true,
   pistol: false,
@@ -44,6 +49,7 @@ export const GAJDOSIK: CharacterLook = {
   ...JANOSIK,
   hair: 0x1a1410,
   vest: 0x2e4a6a,
+  vestTrim: 0xd8b440,
   braids: true,
   feather: true,
   pistol: false,
@@ -101,6 +107,7 @@ export const KRCMAR: CharacterLook = {
   shoes: 0x2a1a12,
   apron: 0xf0ece0,
   vest: 0x2a2a2a,
+  vestTrim: 0xb3261e,
   hat: 'none',
   mustache: true,
   weapon: 'none',
@@ -130,8 +137,10 @@ export const BACA: CharacterLook = {
   pants: 0xe0d6c0,
   shoes: 0x3a2418,
   socks: [0x3a2a1c, 0xe0d6c0],
+  krpce: true,
   belt: COLORS.leather,
   beltLevel: 2,
+  beltStuds: true,
   cape: 0x7a7266,
   hat: 'bacov',
   hatColor: 0x2a2018,
@@ -187,6 +196,7 @@ export const SEDLIAK: CharacterLook = {
   pants: 0xd0c4a8,
   shoes: 0x2a1a12,
   belt: 0x4a3020,
+  krpce: true,
   hat: 'zbojnik',
   hatColor: 0x3a3028,
   weapon: 'none',
@@ -295,6 +305,8 @@ export const DREVORUBAC: CharacterLook = {
   shoes: 0x3a2418,
   socks: [0x3a2a1c, 0xd8ccb0],
   vest: 0x3a4a2a,
+  vestTrim: 0xb3261e,
+  krpce: true,
   belt: COLORS.leather,
   beltLevel: 1,
   hat: 'bacov',
@@ -328,8 +340,8 @@ export const DRAB: CharacterLook = {
 
 /** Men of other zbojnícke partie roaming the hills – same folk dress, different vests and hair. */
 export const BAND_LOOKS: CharacterLook[] = [
-  { ...JANOSIK, hair: 0x4a3020, vest: 0x3c5a2a, braids: true, pistol: false, mustache: true },
-  { ...JANOSIK, hair: 0x2a1e16, vest: 0x5a2a3a, braids: false, pistol: false, beard: 0x2a1e16, girth: 1.08 },
-  { ...JANOSIK, hair: 0x8a5a2a, vest: 0x2a3a5a, braids: true, pistol: false, height: 0.96 },
-  { ...JANOSIK, hair: 0x1a1410, vest: 0x6a4a1a, braids: false, pistol: false, mustache: true, feather: true },
+  { ...JANOSIK, hair: 0x4a3020, vest: 0x3c5a2a, vestTrim: 0xd8b440, braids: true, pistol: false, mustache: true },
+  { ...JANOSIK, hair: 0x2a1e16, vest: 0x5a2a3a, vestTrim: 0x3a6a2a, braids: false, pistol: false, beard: 0x2a1e16, girth: 1.08 },
+  { ...JANOSIK, hair: 0x8a5a2a, vest: 0x2a3a5a, vestTrim: 0xb3261e, braids: true, pistol: false, height: 0.96 },
+  { ...JANOSIK, hair: 0x1a1410, vest: 0x6a4a1a, vestTrim: 0x2e4a6a, braids: false, pistol: false, mustache: true, feather: true },
 ];

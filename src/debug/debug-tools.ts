@@ -19,6 +19,7 @@ interface DebugCommands {
   weather(kind: WeatherKind): string;
   pose(kind: AttackAnim | null, t?: number): string;
   face(yaw: number): string;
+  zoom(distance: number): string;
   state(): unknown;
   pools(): unknown;
   npcs(): unknown;
@@ -118,6 +119,11 @@ export function installDebugTools(game: Game, loop: GameLoop): void {
     pose(kind, t = 0.5) {
       game.debugPose = kind ? { kind, t } : null;
       return kind ? `póza ${kind} @ ${t}` : 'póza vypnutá';
+    },
+    zoom(d) {
+      // debug only: reach into the camera's private target distance for close-up screenshots
+      (game.cameraCtl as unknown as { targetDistance: number }).targetDistance = d;
+      return `kamera ${d} m`;
     },
     face(yaw) {
       game.player.facing = yaw;

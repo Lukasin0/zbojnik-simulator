@@ -35,6 +35,13 @@ export interface CharacterLook {
   pistol?: boolean;
   girth?: number;
   height?: number;
+  /** krpce (opánky) with leather laces wound up the calf instead of shoes/boots */
+  krpce?: boolean;
+  /** folk embroidery (výšivka) colour on the vest's front edges + rosettes */
+  vestTrim?: number;
+  /** brass studs (cvočky) on the wide zbojnícky opasok */
+  beltStuds?: boolean;
+  eyeColor?: number;
 }
 
 export interface AnimParams {
@@ -179,6 +186,11 @@ export class CharacterModel {
   private disguiseParts: THREE.Object3D[] | null = null;
   private stride = 0;
   private air = 0;
+  private eyes: THREE.Group | null = null;
+  private mouth: THREE.Mesh | null = null;
+  private blinkTimer = 1 + Math.random() * 4;
+  /** First frame: put joints straight to their targets instead of easing from the T-pose. */
+  private settled = false;
 
   constructor(private readonly look: CharacterLook) {
     const s = look.height ?? 1;
@@ -211,10 +223,29 @@ export class CharacterModel {
       } else {
         knee.add(at(part(new THREE.CylinderGeometry(0.07, 0.06, 0.38, 7), L.pants), 0, -0.19, 0));
       }
-      const shoe = part(new THREE.BoxGeometry(0.11, 0.07, 0.24), L.shoes);
-      shoe.position.set(0, -0.405, 0.04);
-      knee.add(shoe);
+      if (L.krpce) {
+        knee.add(this.buildKrpce(L.shoes));
+      } else {
+        const shoe = part(new THREE.BoxGeometry(0.11, 0.07, 0.24), L.shoes);
+        shoe.position.set(0, -0.405, 0.04);
+        knee.add(shoe);
+      }
     }
+  }
+
+  /** Flat leather opánky with a pointed, upturned toe and laces criss-crossing up the calf. */
+  private buildKrpce(color: number): THREE.Mesh {
+    const geos: THREE.BufferGeometry[] = [
+      new THREE.BoxGeometry(0.105, 0.05, 0.23).translate(0, -0.415, 0.035),
+      new THREE.BoxGeometry(0.06, 0.04, 0.06).rotateX(-0.5).translate(0, -0.4, 0.16),
+    ];
+    // laces: thin rings tilted alternately so they read as a criss-cross
+    for (let i = 0; i < 5; i++) {
+      const y = -0.36 + i * 0.06;
+      const r = 0.06 + (y + 0.38) * 0.03 + 0.006;
+      geos.push(new THREE.CylinderGeometry(r, r, 0.012, 8, 1, true).rotateX((i % 2 ? 1 : -1) * 0.22).translate(0, y, 0));
+    }
+    return part(merged(geos), color, { roughness: 0.85 });
   }
 
   private buildTorso(): void {
@@ -229,6 +260,21 @@ export class CharacterModel {
       vest.position.set(0, 0.34, -0.012);
       vest.scale.set(g, 1, g * 0.87);
       this.torso.add(vest);
+      if (L.vestTrim !== undefined) {
+        // embroidered front edges and a column of rosettes on each side
+        const zf = 0.205 * g * 0.87 + 0.004;
+        const strips: THREE.BufferGeometry[] = [];
+        const roses: THREE.BufferGeometry[] = [];
+        for (const sx of [-1, 1]) {
+          strips.push(new THREE.BoxGeometry(0.028, 0.4, 0.01).translate(0.045 * sx, 0.34, zf));
+          for (let i = 0; i < 3; i++) {
+            roses.push(new THREE.OctahedronGeometry(0.022, 0).scale(1, 1, 0.4).translate(0.1 * sx * g, 0.46 - i * 0.1, zf - 0.012));
+          }
+        }
+        strips.push(new THREE.BoxGeometry(0.42 * g, 0.022, 0.01).translate(0, 0.14, zf - 0.02));
+        this.torso.add(part(merged(strips), L.vestTrim));
+        this.torso.add(part(merged(roses), 0xb3261e));
+      }
     }
     if (L.coat !== undefined) {
       const len = L.coatLong ? 0.95 : 0.6;
@@ -327,6 +373,20 @@ export class CharacterModel {
       buckles.push(b);
     }
     this.beltGroup.add(part(merged(buckles), 0xc8ccd2, { metalness: 0.8, roughness: 0.3 }));
+    if (L.beltStuds) {
+      // rows of brass cvočky round the front half – one more row per upgrade
+      const studs: THREE.BufferGeometry[] = [];
+      const rows = 1 + level;
+      for (let r = 0; r < rows; r++) {
+        const y = 0.1 - h / 2 + ((r + 0.5) * h) / rows;
+        for (let i = 0; i < 11; i++) {
+          const a = -1.25 + (i / 10) * 2.5 + (r % 2) * 0.12;
+          if (Math.abs(Math.sin(a)) < 0.12) continue; // leave the buckle free
+          studs.push(new THREE.OctahedronGeometry(0.012, 0).translate(Math.sin(a) * 0.218 * g, y, Math.cos(a) * 0.218 * g * 0.86));
+        }
+      }
+      if (studs.length) this.beltGroup.add(part(merged(studs), 0xc9a227, { metalness: 0.8, roughness: 0.35 }));
+    }
   }
 
   setFeather(on: boolean): void {
@@ -343,7 +403,7 @@ export class CharacterModel {
       const sleeveColor = L.coat !== undefined ? L.coat : L.shirt;
       const bottom = L.wideSleeves ? 0.125 : 0.065;
       sh.add(at(part(new THREE.CylinderGeometry(0.065, bottom, 0.5, 7), sleeveColor), 0, -0.25, 0));
-      sh.add(at(part(new THREE.IcosahedronGeometry(0.052, 0), L.skin), 0, -0.55, 0));
+      sh.add(at(part(new THREE.IcosahedronGeometry(0.06, 0).scale(0.9, 1.1, 0.8), L.skin), 0, -0.56, 0));
     }
     this.buildWeapon();
   }
@@ -416,11 +476,27 @@ export class CharacterModel {
     const skull = part(new THREE.IcosahedronGeometry(0.125, 1), L.skin);
     skull.scale.set(0.95, 1.12, 1);
     this.head.add(skull);
-    const nose = part(new THREE.BoxGeometry(0.03, 0.05, 0.04), L.skin);
-    nose.position.set(0, -0.01, 0.125);
+    const nose = part(new THREE.BoxGeometry(0.03, 0.05, 0.045).translate(0, 0, 0.005), L.skin);
+    nose.position.set(0, -0.012, 0.125);
+    nose.rotation.x = -0.12;
     this.head.add(nose);
-    const eyes = [-1, 1].map((sx) => new THREE.BoxGeometry(0.025, 0.018, 0.01).translate(0.045 * sx, 0.025, 0.115));
-    this.head.add(part(merged(eyes), 0x1a1410));
+    // ears
+    this.head.add(part(merged([-1, 1].map((sx) => new THREE.BoxGeometry(0.02, 0.05, 0.035).translate(0.12 * sx, 0.0, 0.0))), L.skin));
+    // eyes: white + iris, in a group that blinks
+    const eyes = new THREE.Group();
+    eyes.position.set(0, 0.025, 0.113);
+    eyes.add(part(merged([-1, 1].map((sx) => new THREE.BoxGeometry(0.034, 0.02, 0.008).translate(0.045 * sx, 0, 0))), 0xf2ece0, { roughness: 0.4 }));
+    eyes.add(part(merged([-1, 1].map((sx) => new THREE.BoxGeometry(0.016, 0.018, 0.008).translate(0.045 * sx + 0.002, 0, 0.004))), L.eyeColor ?? 0x2a1e14, { roughness: 0.3 }));
+    this.head.add(eyes);
+    this.eyes = eyes;
+    // brows – a touch of character
+    const brows = [-1, 1].map((sx) => new THREE.BoxGeometry(0.042, 0.011, 0.012).rotateZ(-0.12 * sx).translate(0.046 * sx, 0.052, 0.116));
+    this.head.add(part(merged(brows), L.hair));
+    // mouth
+    const mouth = part(new THREE.BoxGeometry(0.045, 0.012, 0.01), 0x6a2e26);
+    mouth.position.set(0, -0.068, 0.112);
+    this.head.add(mouth);
+    this.mouth = mouth;
     const hair = part(new THREE.SphereGeometry(0.133, 8, 5, 0, Math.PI * 2, 0, Math.PI * 0.55), L.hair);
     hair.position.set(0, 0.02, -0.012);
     hair.rotation.x = -0.25;
@@ -438,9 +514,12 @@ export class CharacterModel {
       this.head.add(this.braidMesh);
     }
     if (L.mustache) {
-      const m = part(new THREE.BoxGeometry(0.1, 0.022, 0.03), L.hair);
-      m.position.set(0, -0.055, 0.115);
-      this.head.add(m);
+      // the proper drooping Slovak fúzy: two halves swept down past the mouth corners
+      const halves = [-1, 1].map((sx) =>
+        new THREE.BoxGeometry(0.06, 0.02, 0.025).rotateZ(-0.38 * sx).translate(0.03 * sx, -0.06, 0.118),
+      );
+      const tips = [-1, 1].map((sx) => new THREE.BoxGeometry(0.016, 0.04, 0.02).translate(0.062 * sx, -0.085, 0.11));
+      this.head.add(part(merged([...halves, ...tips]), L.beard ?? L.hair));
     }
     if (L.beard !== undefined) {
       const b = part(new THREE.BoxGeometry(0.16, 0.12, 0.08), L.beard);
@@ -654,20 +733,33 @@ export class CharacterModel {
       torsoRy = lerp(torsoRy, 0.3, r);
     }
 
-    this.hipL.rotation.x = hipL;
-    this.hipR.rotation.x = hipR;
-    this.kneeL.rotation.x = kneeL;
-    this.kneeR.rotation.x = kneeR;
-    this.shoulderL.rotation.x = armL;
-    this.shoulderR.rotation.x = armR;
-    this.shoulderL.rotation.z = armLz;
-    this.shoulderR.rotation.z = armRz;
-    this.body.position.y = bodyY;
-    this.body.rotation.x = bodyRx;
+    // Ease every joint towards its target: hides the snaps when a swing ends, a pose changes or the
+    // valaška changes hands. Swings get a stiff spring so they stay crisp; the spin is applied raw
+    // (it wraps a full turn).
+    const lam = this.settled ? (p.attack >= 0 ? 45 : 18) : Infinity;
+    const ease = (cur: number, target: number): number => (lam === Infinity ? target : damp(cur, target, lam, dt));
+    this.settled = true;
+    this.hipL.rotation.x = ease(this.hipL.rotation.x, hipL);
+    this.hipR.rotation.x = ease(this.hipR.rotation.x, hipR);
+    this.kneeL.rotation.x = ease(this.kneeL.rotation.x, kneeL);
+    this.kneeR.rotation.x = ease(this.kneeR.rotation.x, kneeR);
+    this.shoulderL.rotation.x = ease(this.shoulderL.rotation.x, armL);
+    this.shoulderR.rotation.x = ease(this.shoulderR.rotation.x, armR);
+    this.shoulderL.rotation.z = ease(this.shoulderL.rotation.z, armLz);
+    this.shoulderR.rotation.z = ease(this.shoulderR.rotation.z, armRz);
+    this.body.position.y = ease(this.body.position.y, bodyY);
+    this.body.rotation.x = ease(this.body.rotation.x, bodyRx);
     this.body.rotation.y = spin;
-    this.torso.rotation.x = torsoRx;
-    this.torso.rotation.y = torsoRy;
-    this.head.rotation.x = headRx;
+    this.torso.rotation.x = ease(this.torso.rotation.x, torsoRx);
+    this.torso.rotation.y = ease(this.torso.rotation.y, torsoRy);
+    this.head.rotation.x = ease(this.head.rotation.x, headRx);
+
+    // face: blink every few seconds, eyes shut when asleep / knocked out, lips move while talking
+    this.blinkTimer -= dt;
+    if (this.blinkTimer <= 0) this.blinkTimer = 2 + Math.random() * 4;
+    const shut = p.pose === 'sleep' || p.pose === 'dead' || p.pose === 'downed';
+    if (this.eyes) this.eyes.scale.y = shut || this.blinkTimer < 0.12 ? 0.15 : 1;
+    if (this.mouth) this.mouth.scale.y = p.talking ? 1 + Math.abs(Math.sin(this.breath * 5.5)) * 2.4 : 1;
   }
 
   /** World position of the right hand (muzzle flashes, sparks). */

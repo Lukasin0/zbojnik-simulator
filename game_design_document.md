@@ -87,6 +87,13 @@ Keď ho starý parťák Tomáš Uhorčík zasvätí do zbojníckeho remesla a ne
 * **Prestrojenie (H):** stráže v meste bez neho napĺňajú ukazovateľ podozrenia; vytiahnutá valaška prestrojenie zruší.
 * **Mapa:** jeden súvislý svet – dolina (dedina, Rovná hora, salaš, Terchová, hrad), údolie Váhu na východ, Liptovský Mikuláš a roklina Jánošíkove diery. Hory obkolesujú hrateľnú plochu.
 * **Emócie (B):** mávanie, odzemok (družina sa pridá, +ráž), Hej-hou!, smiech, sadnúť si.
+* **Postavy – art bible pre Unity (AAA):** web prototyp je len „maketa“; v Unity budú plnohodnotné riggované modely (Humanoid rig, LOD0–2, blendshapes tváre). Prototyp definuje *čo* postava nosí, nie *ako* vyzerá do detailu:
+  * **Proporcie:** realistické, ~7,5 hlavy; zbojníci šľachovití, široké ramená; `girth` (1,0–1,55) = tučnosť/mohutnosť, `height` (0,92–1,08) = výška.
+  * **Kroj = modulárne časti** (každé pole `CharacterLook` → samostatný mesh/materiál v Unity): košeľa s *rukávmi naširoko* (`wideSleeves`), nohavice/gate, *vesta* (`vest`) s *výšivkou* (`vestTrim` – okraje + ružice), široký *zbojnícky opasok* (`belt`, `beltLevel` 0–3 = šírka a počet prackách, `beltStuds` = mosadzné cvočky), *krpce* s remienkami omotanými okolo lýtok (`krpce`), pruhované *onuce* (`socks`), kabát/plášť (`coat`, `coatLong`, `cape`), sukňa a zástera (`skirt`, `apron`), klobúky (`hat`: zbojnícky s červenou stuhou a pierkom, bačovský, šako, čiapka, šatka, parochňa).
+  * **Tvár:** oči s bielkom a farbou dúhovky (`eyeColor`), obočie, zvesené slovenské fúzy (`mustache`), brada (`beard`), vrkoče (`braids`); žmurkanie, zatvorené oči v spánku/omráčení, pohyb úst pri reči (v Unity: blendshapes + lip-sync).
+  * **Výzbroj:** valaška v ruke alebo zasunutá šikmo za opaskom cez krížy (tasenie spoza pravého boku), šabľa, palica, lampáš, kresadlová pištoľ za opaskom.
+  * **Animácie (zoznam pre mocap/Mixamo):** chôdza/šprint/skok, 3-úderové kombo (šikmý sek, sek späť, skok zhora), vír, mierenie a výstrel, tasenie/zasunutie valašky, zásah, smrť/omráčenie, sed, spánok, lezenie po rebríku, mávanie, smiech, Hej-hou, odzemok. Prechody medzi pózami sú plynulé (blend ~0,1 s, údery tvrdšie).
+  * **Paleta:** prírodné ľanové biele (košele), hnedé kože, tmavomodrá pandúrov, tehlovočervená drábov, folklórne akcenty červená `#b3261e` / zlatožltá `#d8b440` / zelená `#3a6a2a`.
 * **Dáta pre port:** úlohy `src/systems/quest-system.ts`, dialógy `src/story/dialogs.ts`, hlášky `src/story/lines.ts`, čísla a miesta `src/config/constants.ts`.
 
 ---
